@@ -1,14 +1,15 @@
-import { access, appendFile, readFile, writeFile } from "node:fs/promises";
+import "./env-bootstrap.mjs";
+import {
+  appendCheckinInStore,
+  ensureStoreFile,
+  readStore,
+  updateStore,
+  upsertAccountInStore,
+} from "./storage.mjs";
 
 const CONFIG = {
-  checkinUrl: process.env.CHECKIN_URL || "https://open.lxcloud.dev/api/user/checkin",
-  loginUrl:
-    process.env.LOGIN_URL || "https://open.lxcloud.dev/api/user/login?turnstile=",
-  tokenCsvPath: process.env.TOKEN_CSV_PATH || "./tokens.csv",
-  sessionCsvPath: process.env.SESSION_CSV_PATH || "./sessions.csv",
-  userIdCsvPath: process.env.USER_ID_CSV_PATH || "./user-ids.csv",
-  checkinResultCsvPath:
-    process.env.CHECKIN_RESULT_CSV_PATH || "./checkin-results.csv",
+  baseUrl: process.env.BASE_URL || "https://open.lxcloud.dev",
+  storePath: process.env.STORE_PATH || "./data/store.json",
   requestDelayMs: Number(process.env.CHECKIN_DELAY_MS || 1000),
   maxRetries: Number(process.env.CHECKIN_MAX_RETRIES || 4),
   retryDelayMs: Number(process.env.CHECKIN_RETRY_DELAY_MS || 300000),
@@ -16,125 +17,15 @@ const CONFIG = {
   defaultNewApiUser: process.env.NEW_API_USER || "",
 };
 
+const CHECKIN_URL = `${CONFIG.baseUrl}/api/user/checkin`;
+const LOGIN_URL = `${CONFIG.baseUrl}/api/user/login?turnstile=`;
+
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function ensureCsvHeader(filePath, headerLine) {
-  try {
-    await access(filePath);
-    const content = await readFile(filePath, "utf8");
-    if (!content.trim()) {
-      await writeFile(filePath, `${headerLine}\n`, "utf8");
-      return;
-    }
-    if (!content.startsWith(`${headerLine}\n`) && content !== headerLine) {
-      await writeFile(filePath, `${headerLine}\n${content}`, "utf8");
-    }
-  } catch {
-    await writeFile(filePath, `${headerLine}\n`, "utf8");
-  }
-}
-
-async function readCsvRows(filePath) {
-  try {
-    const content = await readFile(filePath, "utf8");
-    const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    if (lines.length <= 1) {
-      return [];
-    }
-    const header = lines[0].split(",").map((x) => x.trim());
-    const rows = [];
-    for (let i = 1; i < lines.length; i += 1) {
-      const values = lines[i].split(",");
-      const row = {};
-      for (let j = 0; j < header.length; j += 1) {
-        row[header[j]] = (values[j] || "").trim();
-      }
-
-      const hasAnyValue = header.some((key) => String(row[key] || "").trim() !== "");
-      if (!hasAnyValue) {
-        continue;
-      }
-
-      const isDuplicateHeader = header.every(
-        (key) => String(row[key] || "").toLowerCase() === String(key).toLowerCase(),
-      );
-      if (isDuplicateHeader) {
-        continue;
-      }
-
-      rows.push(row);
-    }
-    return rows;
-  } catch {
-    return [];
-  }
-}
-
-function toAccountMap(tokenRows, sessionRows, userIdRows) {
-  const map = new Map();
-
-  const isPlaceholder = (value, expected) =>
-    String(value || "").trim().toLowerCase() === expected;
-
-  for (const row of tokenRows) {
-    const username = row.username || "";
-    const password = row.password || "";
-    if (isPlaceholder(username, "username") || isPlaceholder(password, "password")) {
-      continue;
-    }
-    if (!username || !password) {
-      continue;
-    }
-    map.set(username, {
-      username,
-      password,
-      newApiUser: "",
-      session: "",
-    });
-  }
-
-  for (const row of sessionRows) {
-    const username = row.username || "";
-    const password = row.password || "";
-    if (isPlaceholder(username, "username") || isPlaceholder(password, "password")) {
-      continue;
-    }
-    if (!username) {
-      continue;
-    }
-    const prev = map.get(username) || {
-      username,
-      password: row.password || "",
-      newApiUser: "",
-      session: "",
-    };
-    prev.password = prev.password || row.password || "";
-    prev.newApiUser = row.new_api_user || prev.newApiUser || "";
-    prev.session = row.session || prev.session || "";
-    map.set(username, prev);
-  }
-
-  for (const row of userIdRows) {
-    const username = row.username || "";
-    if (isPlaceholder(username, "username")) {
-      continue;
-    }
-    if (!username) {
-      continue;
-    }
-    const prev = map.get(username) || {
-      username,
-      password: row.password || "",
-      newApiUser: "",
-      session: "",
-    };
-    prev.newApiUser = row.new_api_user || prev.newApiUser || "";
-    map.set(username, prev);
-  }
-
-  return map;
 }
 
 function parsePossibleUserId(response) {
@@ -192,68 +83,11 @@ function combineCookies(sessionCookie) {
   return sessionCookie || CONFIG.extraCookies;
 }
 
-async function upsertUserId(username, newApiUser) {
-  if (!username || !newApiUser) {
-    return;
-  }
-
-  await ensureCsvHeader(CONFIG.userIdCsvPath, "username,new_api_user");
-  const content = await readFile(CONFIG.userIdCsvPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const header = lines[0] || "username,new_api_user";
-  const rows = lines.slice(1);
-
-  const filtered = rows.filter((line) => {
-    const first = line.split(",")[0]?.trim();
-    return first !== username;
+async function saveAccountPatch(username, patch) {
+  await updateStore(CONFIG.storePath, (store) => {
+    upsertAccountInStore(store, { username, ...patch });
+    return store;
   });
-
-  filtered.push(`${username},${newApiUser}`);
-  await writeFile(CONFIG.userIdCsvPath, `${header}\n${filtered.join("\n")}\n`, "utf8");
-}
-
-async function appendSession(username, password, newApiUser, session) {
-  await ensureCsvHeader(CONFIG.sessionCsvPath, "username,password,new_api_user,session");
-
-  const content = await readFile(CONFIG.sessionCsvPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const header = lines[0] || "username,password,new_api_user,session";
-  const rows = lines.slice(1);
-
-  const filtered = rows.filter((line) => {
-    const first = line.split(",")[0]?.trim();
-    return first !== username;
-  });
-
-  filtered.push(`${username},${password || ""},${newApiUser || ""},${session || ""}`);
-  await writeFile(CONFIG.sessionCsvPath, `${header}\n${filtered.join("\n")}\n`, "utf8");
-}
-
-async function normalizeSessionsCsv() {
-  await ensureCsvHeader(CONFIG.sessionCsvPath, "username,password,new_api_user,session");
-
-  const content = await readFile(CONFIG.sessionCsvPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const header = lines[0] || "username,password,new_api_user,session";
-  const rows = lines.slice(1);
-
-  const seen = new Set();
-  const latestRows = [];
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i];
-    const username = row.split(",")[0]?.trim();
-    if (!username || seen.has(username)) {
-      continue;
-    }
-    seen.add(username);
-    latestRows.unshift(row);
-  }
-
-  await writeFile(
-    CONFIG.sessionCsvPath,
-    `${header}${latestRows.length ? `\n${latestRows.join("\n")}` : ""}\n`,
-    "utf8",
-  );
 }
 
 async function loginAndGetSession(username, password) {
@@ -264,8 +98,8 @@ async function loginAndGetSession(username, password) {
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
-    Origin: "https://open.lxcloud.dev",
-    Referer: "https://open.lxcloud.dev/login",
+    Origin: CONFIG.baseUrl,
+    Referer: `${CONFIG.baseUrl}/login`,
     Connection: "keep-alive",
     ...(CONFIG.defaultNewApiUser
       ? { "New-API-User": String(CONFIG.defaultNewApiUser) }
@@ -273,7 +107,7 @@ async function loginAndGetSession(username, password) {
     ...(CONFIG.extraCookies ? { Cookie: CONFIG.extraCookies } : {}),
   };
 
-  const res = await fetch(CONFIG.loginUrl, {
+  const res = await fetch(LOGIN_URL, {
     method: "POST",
     headers,
     body: JSON.stringify({ username, password }),
@@ -311,8 +145,8 @@ async function checkinOnce(account) {
     "Accept-Language": "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Cache-Control": "no-store",
-    Origin: "https://open.lxcloud.dev",
-    Referer: "https://open.lxcloud.dev/console/personal",
+    Origin: CONFIG.baseUrl,
+    Referer: `${CONFIG.baseUrl}/console/personal`,
     Connection: "keep-alive",
     ...((account.newApiUser || CONFIG.defaultNewApiUser)
       ? { "New-API-User": String(account.newApiUser || CONFIG.defaultNewApiUser) }
@@ -320,7 +154,7 @@ async function checkinOnce(account) {
     ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
 
-  const res = await fetch(CONFIG.checkinUrl, {
+  const res = await fetch(CHECKIN_URL, {
     method: "POST",
     headers,
   });
@@ -335,6 +169,169 @@ async function checkinOnce(account) {
   };
 }
 
+export async function queryCheckinStatus(account, month = currentMonth()) {
+  const cookieHeader = combineCookies(account.session);
+  const url = `${CHECKIN_URL}?month=${encodeURIComponent(month)}`;
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+    Accept: "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Cache-Control": "no-store",
+    Origin: CONFIG.baseUrl,
+    Referer: `${CONFIG.baseUrl}/console/personal`,
+    Connection: "keep-alive",
+    ...((account.newApiUser || CONFIG.defaultNewApiUser)
+      ? { "New-API-User": String(account.newApiUser || CONFIG.defaultNewApiUser) }
+      : {}),
+    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+  };
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers,
+  });
+
+  const body = parseResponseToJson(await res.text());
+  const ok = isApiSuccess(res.ok, body);
+  const stats = body?.data?.stats || {};
+
+  return {
+    ok,
+    status: res.status,
+    body,
+    checkinStatus: {
+      month,
+      checkedInToday: Boolean(stats.checked_in_today),
+      checkinCount: Number(stats.checkin_count || 0),
+      totalCheckins: Number(stats.total_checkins || 0),
+      totalQuota: Number(stats.total_quota || 0),
+      records: Array.isArray(stats.records)
+        ? stats.records.map((record) => ({
+            checkinDate: String(record.checkin_date || "").trim(),
+            quotaAwarded: Number(record.quota_awarded || 0),
+          }))
+        : [],
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export async function refreshAccountCheckinStatus(username, month = currentMonth()) {
+  const store = await readStore(CONFIG.storePath);
+  const account = store.accounts.find((item) => item.username === username);
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  if (!account.password) {
+    throw new Error("Account password is required");
+  }
+
+  if (!account.session) {
+    const loginResult = await loginAndGetSession(account.username, account.password);
+    if (!loginResult.ok) {
+      throw new Error(`Login failed: ${loginResult.message}`);
+    }
+    account.session = loginResult.session;
+    account.newApiUser = loginResult.newApiUser || account.newApiUser;
+    await saveAccountPatch(account.username, {
+      password: account.password,
+      newApiUser: account.newApiUser,
+      session: account.session,
+      lastLoginAt: new Date().toISOString(),
+    });
+  }
+
+  const result = await queryCheckinStatus(account, month);
+  await saveAccountPatch(account.username, {
+    password: account.password,
+    newApiUser: account.newApiUser,
+    session: account.session,
+    checkinStatus: result.checkinStatus,
+  });
+  return result;
+}
+
+export async function manualCheckin(username) {
+  const store = await readStore(CONFIG.storePath);
+  const account = store.accounts.find((item) => item.username === username);
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  if (!account.password) {
+    throw new Error("Account password is required");
+  }
+
+  if (!account.session) {
+    const loginResult = await loginAndGetSession(account.username, account.password);
+    if (!loginResult.ok) {
+      throw new Error(`Login failed: ${loginResult.message}`);
+    }
+    account.session = loginResult.session;
+    account.newApiUser = loginResult.newApiUser || account.newApiUser;
+    await saveAccountPatch(account.username, {
+      password: account.password,
+      newApiUser: account.newApiUser,
+      session: account.session,
+      lastLoginAt: new Date().toISOString(),
+    });
+  }
+
+  const result = await checkinWithRetry(account, 1, 1);
+  const now = new Date().toISOString();
+  const message = String(result?.body?.message || "").replace(/,/g, " ");
+  const checkinDate = result?.body?.data?.checkin_date || "";
+  const quotaAwarded = result?.body?.data?.quota_awarded ?? "";
+
+  await updateStore(CONFIG.storePath, (latestStore) => {
+    upsertAccountInStore(latestStore, {
+      username: account.username,
+      password: account.password,
+      newApiUser: account.newApiUser,
+      session: account.session,
+      lastCheckinAt: now,
+      lastCheckin: {
+        status: result.status,
+        success: result.ok,
+        message,
+        checkinDate,
+        quotaAwarded,
+        time: now,
+      },
+      checkinStatus: {
+        month: currentMonth(),
+        checkedInToday: Boolean(result.ok),
+        checkinCount: 1,
+        totalCheckins: 1,
+        totalQuota: Number(quotaAwarded || 0),
+        records: checkinDate ? [{ checkinDate, quotaAwarded: Number(quotaAwarded || 0) }] : [],
+        updatedAt: now,
+      },
+    });
+    appendCheckinInStore(latestStore, {
+      time: now,
+      username: account.username,
+      newApiUser: account.newApiUser || "",
+      status: result.status,
+      success: result.ok,
+      message,
+      checkinDate,
+      quotaAwarded,
+    });
+    return latestStore;
+  });
+
+  try {
+    await refreshAccountCheckinStatus(account.username, currentMonth());
+  } catch {
+    // keep manual check-in result even if status refresh fails
+  }
+
+  return result;
+}
+
 async function checkinWithRetry(account, index, total) {
   for (let attempt = 1; attempt <= CONFIG.maxRetries + 1; attempt += 1) {
     const result = await checkinOnce(account);
@@ -344,22 +341,19 @@ async function checkinWithRetry(account, index, total) {
     }
 
     if (result.status === 401) {
-      const relogin = await loginAndGetSession(account.username, account.password);
-      if (relogin.ok) {
-        account.session = relogin.session;
-        account.newApiUser = relogin.newApiUser || account.newApiUser;
-        await appendSession(
-          account.username,
-          account.password,
-          account.newApiUser,
-          account.session,
-        );
-        if (account.newApiUser) {
-          await upsertUserId(account.username, account.newApiUser);
-        }
-        if (CONFIG.requestDelayMs > 0) {
-          await sleep(CONFIG.requestDelayMs);
-        }
+        const relogin = await loginAndGetSession(account.username, account.password);
+        if (relogin.ok) {
+          account.session = relogin.session;
+          account.newApiUser = relogin.newApiUser || account.newApiUser;
+          await saveAccountPatch(account.username, {
+            password: account.password,
+            newApiUser: account.newApiUser,
+            session: account.session,
+            lastLoginAt: new Date().toISOString(),
+          });
+          if (CONFIG.requestDelayMs > 0) {
+            await sleep(CONFIG.requestDelayMs);
+          }
         continue;
       }
       return {
@@ -394,21 +388,12 @@ async function checkinWithRetry(account, index, total) {
 }
 
 export async function runCheckin() {
-  await ensureCsvHeader(CONFIG.sessionCsvPath, "username,password,new_api_user,session");
-  await normalizeSessionsCsv();
-  await ensureCsvHeader(CONFIG.userIdCsvPath, "username,new_api_user");
-  await ensureCsvHeader(
-    CONFIG.checkinResultCsvPath,
-    "time,username,new_api_user,status,success,message,checkin_date,quota_awarded",
-  );
-
-  const tokenRows = await readCsvRows(CONFIG.tokenCsvPath);
-  const sessionRows = await readCsvRows(CONFIG.sessionCsvPath);
-  const userIdRows = await readCsvRows(CONFIG.userIdCsvPath);
-  const accounts = Array.from(toAccountMap(tokenRows, sessionRows, userIdRows).values());
+  await ensureStoreFile(CONFIG.storePath);
+  const store = await readStore(CONFIG.storePath);
+  const accounts = store.accounts.filter((account) => account.username);
 
   if (accounts.length === 0) {
-    throw new Error("未找到可用账号，请先准备 tokens.csv 或 sessions.csv");
+    throw new Error("未找到可用账号，请先准备 store.json 中的 accounts");
   }
 
   let okCount = 0;
@@ -438,10 +423,12 @@ export async function runCheckin() {
 
       acc.session = loginResult.session;
       acc.newApiUser = loginResult.newApiUser || acc.newApiUser;
-      await appendSession(acc.username, acc.password, acc.newApiUser, acc.session);
-      if (acc.newApiUser) {
-        await upsertUserId(acc.username, acc.newApiUser);
-      }
+      await saveAccountPatch(acc.username, {
+        password: acc.password,
+        newApiUser: acc.newApiUser,
+        session: acc.session,
+        lastLoginAt: new Date().toISOString(),
+      });
       if (CONFIG.requestDelayMs > 0) {
         await sleep(CONFIG.requestDelayMs);
       }
@@ -453,11 +440,34 @@ export async function runCheckin() {
     const checkinDate = result?.body?.data?.checkin_date || "";
     const quotaAwarded = result?.body?.data?.quota_awarded ?? "";
 
-    await appendFile(
-      CONFIG.checkinResultCsvPath,
-      `${now},${acc.username},${acc.newApiUser || ""},${result.status},${result.ok},${message},${checkinDate},${quotaAwarded}\n`,
-      "utf8",
-    );
+    await updateStore(CONFIG.storePath, (latestStore) => {
+      upsertAccountInStore(latestStore, {
+        username: acc.username,
+        password: acc.password,
+        newApiUser: acc.newApiUser,
+        session: acc.session,
+        lastCheckinAt: now,
+        lastCheckin: {
+          status: result.status,
+          success: result.ok,
+          message,
+          checkinDate,
+          quotaAwarded,
+          time: now,
+        },
+      });
+      appendCheckinInStore(latestStore, {
+        time: now,
+        username: acc.username,
+        newApiUser: acc.newApiUser || "",
+        status: result.status,
+        success: result.ok,
+        message,
+        checkinDate,
+        quotaAwarded,
+      });
+      return latestStore;
+    });
 
     if (result.ok) {
       okCount += 1;

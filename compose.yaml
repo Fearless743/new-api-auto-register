@@ -6,11 +6,10 @@ services:
     env_file:
       - .env
     environment:
+      STORE_PATH: /app/data/store.json
       TOKEN_CSV_PATH: /app/data/tokens.csv
       TOKEN_TXT_PATH: /app/data/tokens.txt
-      SESSION_CSV_PATH: /app/data/sessions.csv
-      BALANCE_CSV_PATH: /app/data/balances.csv
-      USER_ID_CSV_PATH: /app/data/user-ids.csv
-      CHECKIN_RESULT_CSV_PATH: /app/data/checkin-results.csv
+    ports:
+      - "${API_PORT:-3000}:${API_PORT:-3000}"
     volumes:
       - ./data:/app/data

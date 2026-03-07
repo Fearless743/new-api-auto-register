@@ -7,11 +7,14 @@ RUN npm install --omit=dev
 
 COPY batch-register.mjs ./
 COPY checkin.mjs ./
-COPY checkin-cron.mjs ./
 COPY query-balance.mjs ./
+COPY service.mjs ./
+COPY storage.mjs ./
 COPY upload-tokens.mjs ./
 COPY .env.example ./
 
 RUN mkdir -p /app/data
 
-CMD ["npm", "run", "checkin:cron"]
+EXPOSE 3000
+
+CMD ["npm", "run", "service"]

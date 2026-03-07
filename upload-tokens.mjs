@@ -1,28 +1,33 @@
+import "./env-bootstrap.mjs";
 import { readFile } from "node:fs/promises";
+import { listUniqueTokens, readStore } from "./storage.mjs";
 
 const CONFIG = {
   tokenTxtPath: process.env.TOKEN_TXT_PATH || "./tokens.txt",
   tokenCsvPath: process.env.TOKEN_CSV_PATH || "./tokens.csv",
+  storePath: process.env.STORE_PATH || "./data/store.json",
   managementUrl: process.env.MANAGEMENT_OPENAI_COMPAT_URL || "",
   managementBearer: process.env.MANAGEMENT_BEARER || "",
-  providerName: process.env.MANAGEMENT_PROVIDER_NAME || "lxcloud",
-  providerBaseUrl:
-    process.env.MANAGEMENT_PROVIDER_BASE_URL || "https://open.lxcloud.dev/v1",
-  models:
-    process.env.MANAGEMENT_MODELS ||
-    "gpt-5.2-codex,gpt-5.4,gpt-5.3-codex,gpt-5.2,gpt-5-codex-mini,gpt-5.1-codex-mini,gpt-5,gpt-5.1,gpt-5.1-codex-max,gpt-5.1-codex,gpt-5-codex",
-  priority: Number(process.env.MANAGEMENT_PRIORITY || 10),
-  testModel: process.env.MANAGEMENT_TEST_MODEL || "gpt-5.2-codex",
   existingTokens: process.env.MANAGEMENT_EXISTING_TOKENS || "",
 };
 
-function parseModels(raw) {
-  return String(raw)
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean)
-    .map((name) => ({ name }));
-}
+const PROVIDER_NAME = "lxcloud";
+const PROVIDER_BASE_URL = "https://open.lxcloud.dev/v1";
+const PROVIDER_MODELS = [
+  "gpt-5.2-codex",
+  "gpt-5.4",
+  "gpt-5.3-codex",
+  "gpt-5.2",
+  "gpt-5-codex-mini",
+  "gpt-5.1-codex-mini",
+  "gpt-5",
+  "gpt-5.1",
+  "gpt-5.1-codex-max",
+  "gpt-5.1-codex",
+  "gpt-5-codex",
+];
+const PROVIDER_PRIORITY = 10;
+const PROVIDER_TEST_MODEL = "gpt-5.2-codex";
 
 async function readTokensFromTxt(filePath) {
   try {
@@ -83,12 +88,12 @@ function parseTokenList(raw) {
 function buildPayload(tokens) {
   return [
     {
-      name: CONFIG.providerName,
-      "base-url": CONFIG.providerBaseUrl,
+      name: PROVIDER_NAME,
+      "base-url": PROVIDER_BASE_URL,
       "api-key-entries": tokens.map((token) => ({ "api-key": token })),
-      models: parseModels(CONFIG.models),
-      priority: CONFIG.priority,
-      "test-model": CONFIG.testModel,
+      models: PROVIDER_MODELS.map((name) => ({ name })),
+      priority: PROVIDER_PRIORITY,
+      "test-model": PROVIDER_TEST_MODEL,
     },
   ];
 }
@@ -102,6 +107,12 @@ function toOrigin(urlText) {
 }
 
 async function main() {
+  const result = await runUploadTokens();
+  console.log(`Uploaded ${result.tokenCount} unique tokens to ${CONFIG.managementUrl}`);
+  console.log(result.body);
+}
+
+export async function runUploadTokens() {
   if (!CONFIG.managementUrl) {
     throw new Error("MANAGEMENT_OPENAI_COMPAT_URL is required");
   }
@@ -112,11 +123,13 @@ async function main() {
 
   const txtTokens = await readTokensFromTxt(CONFIG.tokenTxtPath);
   const csvTokens = await readTokensFromCsv(CONFIG.tokenCsvPath);
+  const store = await readStore(CONFIG.storePath).catch(() => ({ accounts: [] }));
+  const storeTokens = listUniqueTokens(store);
   const existingTokens = parseTokenList(CONFIG.existingTokens);
-  const tokens = uniqueTokens([...existingTokens, ...txtTokens, ...csvTokens]);
+  const tokens = uniqueTokens([...existingTokens, ...storeTokens, ...txtTokens, ...csvTokens]);
 
   if (tokens.length === 0) {
-    throw new Error("No tokens found in tokens.txt or tokens.csv");
+    throw new Error("No tokens found in store.json, tokens.txt, or tokens.csv");
   }
 
   const payload = buildPayload(tokens);
@@ -145,14 +158,16 @@ async function main() {
   }
 
   if (!res.ok) {
-    console.error(`Upload failed: HTTP ${res.status}`);
-    console.error(body);
-    process.exitCode = 1;
-    return;
+    throw new Error(
+      `Upload failed: HTTP ${res.status}${typeof body === "string" ? ` ${body}` : ""}`,
+    );
   }
 
-  console.log(`Uploaded ${tokens.length} unique tokens to ${CONFIG.managementUrl}`);
-  console.log(body);
+  return {
+    tokenCount: tokens.length,
+    body,
+    managementUrl: CONFIG.managementUrl,
+  };
 }
 
 main().catch((err) => {

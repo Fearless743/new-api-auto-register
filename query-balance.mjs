@@ -1,206 +1,25 @@
-import { access, appendFile, readFile, writeFile } from "node:fs/promises";
+import "./env-bootstrap.mjs";
+import {
+  ensureStoreFile,
+  readStore,
+  setBalanceSnapshotInStore,
+  updateStore,
+  upsertAccountInStore,
+} from "./storage.mjs";
 
 const CONFIG = {
-  selfUrl: process.env.SELF_URL || "https://open.lxcloud.dev/api/user/self",
-  loginUrl:
-    process.env.LOGIN_URL || "https://open.lxcloud.dev/api/user/login?turnstile=",
-  tokenCsvPath: process.env.TOKEN_CSV_PATH || "./tokens.csv",
-  sessionCsvPath: process.env.SESSION_CSV_PATH || "./sessions.csv",
-  balanceCsvPath: process.env.BALANCE_CSV_PATH || "./balances.csv",
-  userIdCsvPath: process.env.USER_ID_CSV_PATH || "./user-ids.csv",
+  baseUrl: process.env.BASE_URL || "https://open.lxcloud.dev",
+  storePath: process.env.STORE_PATH || "./data/store.json",
   requestDelayMs: Number(process.env.QUERY_DELAY_MS || 1000),
   extraCookies: process.env.EXTRA_COOKIES || "",
   defaultNewApiUser: process.env.NEW_API_USER || "",
 };
 
+const SELF_URL = `${CONFIG.baseUrl}/api/user/self`;
+const LOGIN_URL = `${CONFIG.baseUrl}/api/user/login?turnstile=`;
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function ensureCsvHeader(filePath, headerLine) {
-  try {
-    await access(filePath);
-    const content = await readFile(filePath, "utf8");
-    if (!content.trim()) {
-      await writeFile(filePath, `${headerLine}\n`, "utf8");
-      return;
-    }
-    if (!content.startsWith(`${headerLine}\n`) && content !== headerLine) {
-      await writeFile(filePath, `${headerLine}\n${content}`, "utf8");
-    }
-  } catch {
-    await writeFile(filePath, `${headerLine}\n`, "utf8");
-  }
-}
-
-async function readCsvRows(filePath) {
-  try {
-    const content = await readFile(filePath, "utf8");
-    const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    if (lines.length <= 1) {
-      return [];
-    }
-    const header = lines[0].split(",").map((x) => x.trim());
-    const rows = [];
-    for (let i = 1; i < lines.length; i += 1) {
-      const values = lines[i].split(",");
-      const row = {};
-      for (let j = 0; j < header.length; j += 1) {
-        row[header[j]] = (values[j] || "").trim();
-      }
-
-      const hasAnyValue = header.some((key) => String(row[key] || "").trim() !== "");
-      if (!hasAnyValue) {
-        continue;
-      }
-
-      const isDuplicateHeader = header.every(
-        (key) => String(row[key] || "").toLowerCase() === String(key).toLowerCase(),
-      );
-      if (isDuplicateHeader) {
-        continue;
-      }
-
-      rows.push(row);
-    }
-    return rows;
-  } catch {
-    return [];
-  }
-}
-
-function toAccountMap(tokenRows, sessionRows, userIdRows) {
-  const map = new Map();
-
-  const isPlaceholder = (value, expected) =>
-    String(value || "").trim().toLowerCase() === expected;
-
-  for (const row of tokenRows) {
-    const username = row.username || "";
-    const password = row.password || "";
-    if (isPlaceholder(username, "username") || isPlaceholder(password, "password")) {
-      continue;
-    }
-    if (!username || !password) {
-      continue;
-    }
-    map.set(username, {
-      username,
-      password,
-      newApiUser: "",
-      session: "",
-    });
-  }
-
-  for (const row of sessionRows) {
-    const username = row.username || "";
-    const password = row.password || "";
-    if (isPlaceholder(username, "username") || isPlaceholder(password, "password")) {
-      continue;
-    }
-    if (!username) {
-      continue;
-    }
-    const prev = map.get(username) || {
-      username,
-      password: row.password || "",
-      newApiUser: "",
-      session: "",
-    };
-    prev.password = prev.password || row.password || "";
-    prev.newApiUser = row.new_api_user || prev.newApiUser || "";
-    prev.session = row.session || prev.session || "";
-    map.set(username, prev);
-  }
-
-  for (const row of userIdRows) {
-    const username = row.username || "";
-    if (isPlaceholder(username, "username")) {
-      continue;
-    }
-    if (!username) {
-      continue;
-    }
-    const prev = map.get(username) || {
-      username,
-      password: row.password || "",
-      newApiUser: "",
-      session: "",
-    };
-    prev.newApiUser = row.new_api_user || prev.newApiUser || "";
-    map.set(username, prev);
-  }
-
-  return map;
-}
-
-async function upsertUserId(username, newApiUser) {
-  if (!username || !newApiUser) {
-    return;
-  }
-
-  await ensureCsvHeader(CONFIG.userIdCsvPath, "username,new_api_user");
-
-  const content = await readFile(CONFIG.userIdCsvPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const header = lines[0] || "username,new_api_user";
-  const rows = lines.slice(1);
-
-  const filtered = rows.filter((line) => {
-    const first = line.split(",")[0]?.trim();
-    return first !== username;
-  });
-
-  filtered.push(`${username},${newApiUser}`);
-  await writeFile(CONFIG.userIdCsvPath, `${header}\n${filtered.join("\n")}\n`, "utf8");
-}
-
-async function upsertSession(username, password, newApiUser, session) {
-  if (!username) {
-    return;
-  }
-
-  await ensureCsvHeader(CONFIG.sessionCsvPath, "username,password,new_api_user,session");
-
-  const content = await readFile(CONFIG.sessionCsvPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const header = lines[0] || "username,password,new_api_user,session";
-  const rows = lines.slice(1);
-
-  const filtered = rows.filter((line) => {
-    const first = line.split(",")[0]?.trim();
-    return first !== username;
-  });
-
-  filtered.push(`${username},${password || ""},${newApiUser || ""},${session || ""}`);
-  await writeFile(CONFIG.sessionCsvPath, `${header}\n${filtered.join("\n")}\n`, "utf8");
-}
-
-async function normalizeSessionsCsv() {
-  await ensureCsvHeader(CONFIG.sessionCsvPath, "username,password,new_api_user,session");
-
-  const content = await readFile(CONFIG.sessionCsvPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const header = lines[0] || "username,password,new_api_user,session";
-  const rows = lines.slice(1);
-
-  const seen = new Set();
-  const latestRows = [];
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i];
-    const username = row.split(",")[0]?.trim();
-    if (!username || seen.has(username)) {
-      continue;
-    }
-    seen.add(username);
-    latestRows.unshift(row);
-  }
-
-  await writeFile(
-    CONFIG.sessionCsvPath,
-    `${header}${latestRows.length ? `\n${latestRows.join("\n")}` : ""}\n`,
-    "utf8",
-  );
 }
 
 function parsePossibleUserId(response) {
@@ -266,8 +85,8 @@ async function loginAndGetSession(username, password) {
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
-    Origin: "https://open.lxcloud.dev",
-    Referer: "https://open.lxcloud.dev/login",
+    Origin: CONFIG.baseUrl,
+    Referer: `${CONFIG.baseUrl}/login`,
     Connection: "keep-alive",
     ...(CONFIG.defaultNewApiUser
       ? { "New-API-User": String(CONFIG.defaultNewApiUser) }
@@ -275,7 +94,7 @@ async function loginAndGetSession(username, password) {
     ...(CONFIG.extraCookies ? { Cookie: CONFIG.extraCookies } : {}),
   };
 
-  const res = await fetch(CONFIG.loginUrl, {
+  const res = await fetch(LOGIN_URL, {
     method: "POST",
     headers,
     body: JSON.stringify({ username, password }),
@@ -304,6 +123,13 @@ async function loginAndGetSession(username, password) {
   };
 }
 
+async function saveAccountPatch(username, patch) {
+  await updateStore(CONFIG.storePath, (store) => {
+    upsertAccountInStore(store, { username, ...patch });
+    return store;
+  });
+}
+
 async function fetchSelf(account) {
   const cookieHeader = combineCookies(account.session);
   const headers = {
@@ -313,14 +139,14 @@ async function fetchSelf(account) {
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Cache-Control": "no-store",
     Connection: "keep-alive",
-    Referer: "https://open.lxcloud.dev/console/topup",
+    Referer: `${CONFIG.baseUrl}/console/topup`,
     ...((account.newApiUser || CONFIG.defaultNewApiUser)
       ? { "New-API-User": String(account.newApiUser || CONFIG.defaultNewApiUser) }
       : {}),
     ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
 
-  const res = await fetch(CONFIG.selfUrl, { method: "GET", headers });
+  const res = await fetch(SELF_URL, { method: "GET", headers });
   const body = parseResponseToJson(await res.text());
   const ok = isApiSuccess(res.ok, body);
 
@@ -340,22 +166,18 @@ function quotaToUsd(quota) {
   return `$${usd.toFixed(2)}`;
 }
 
-async function main() {
-  await ensureCsvHeader(CONFIG.sessionCsvPath, "username,password,new_api_user,session");
-  await normalizeSessionsCsv();
-  await ensureCsvHeader(CONFIG.balanceCsvPath, "username,quota,balance");
-  await ensureCsvHeader(CONFIG.userIdCsvPath, "username,new_api_user");
-
-  const tokenRows = await readCsvRows(CONFIG.tokenCsvPath);
-  const sessionRows = await readCsvRows(CONFIG.sessionCsvPath);
-  const userIdRows = await readCsvRows(CONFIG.userIdCsvPath);
-  const accounts = Array.from(toAccountMap(tokenRows, sessionRows, userIdRows).values());
+export async function runBalanceRefresh() {
+  await ensureStoreFile(CONFIG.storePath);
+  const store = await readStore(CONFIG.storePath);
+  const accounts = store.accounts.filter((account) => account.username && account.password);
 
   if (accounts.length === 0) {
-    throw new Error("未找到可用账号，请先准备 tokens.csv 或 sessions.csv");
+    throw new Error("未找到可用账号，请先准备 store.json 中的 accounts");
   }
 
   let totalQuota = 0;
+  let totalUsedQuota = 0;
+  const snapshotAccounts = [];
 
   for (let i = 0; i < accounts.length; i += 1) {
     const acc = accounts[i];
@@ -365,8 +187,12 @@ async function main() {
       if (loginForUserId.ok && loginForUserId.newApiUser) {
         acc.newApiUser = loginForUserId.newApiUser;
         acc.session = loginForUserId.session || acc.session;
-        await upsertUserId(acc.username, acc.newApiUser);
-        await upsertSession(acc.username, acc.password, acc.newApiUser, acc.session);
+        await saveAccountPatch(acc.username, {
+          password: acc.password,
+          newApiUser: acc.newApiUser,
+          session: acc.session,
+          lastLoginAt: new Date().toISOString(),
+        });
         if (CONFIG.requestDelayMs > 0) {
           await sleep(CONFIG.requestDelayMs);
         }
@@ -378,11 +204,23 @@ async function main() {
       if (loginResult.ok) {
         acc.session = loginResult.session;
         acc.newApiUser = loginResult.newApiUser || acc.newApiUser;
-        if (acc.newApiUser) {
-          await upsertUserId(acc.username, acc.newApiUser);
-        }
-        await upsertSession(acc.username, acc.password, acc.newApiUser, acc.session);
+        await saveAccountPatch(acc.username, {
+          password: acc.password,
+          newApiUser: acc.newApiUser,
+          session: acc.session,
+          lastLoginAt: new Date().toISOString(),
+        });
       } else {
+        snapshotAccounts.push({
+          username: acc.username,
+          quota: 0,
+          balance: "$0.00",
+          usedQuota: 0,
+          usedBalance: "$0.00",
+          updatedAt: new Date().toISOString(),
+          status: loginResult.status,
+          newApiUser: acc.newApiUser || "",
+        });
         if (CONFIG.requestDelayMs > 0) {
           await sleep(CONFIG.requestDelayMs);
         }
@@ -397,10 +235,12 @@ async function main() {
       if (relogin.ok) {
         acc.session = relogin.session;
         acc.newApiUser = relogin.newApiUser || acc.newApiUser;
-        if (acc.newApiUser) {
-          await upsertUserId(acc.username, acc.newApiUser);
-        }
-        await upsertSession(acc.username, acc.password, acc.newApiUser, acc.session);
+        await saveAccountPatch(acc.username, {
+          password: acc.password,
+          newApiUser: acc.newApiUser,
+          session: acc.session,
+          lastLoginAt: new Date().toISOString(),
+        });
         if (CONFIG.requestDelayMs > 0) {
           await sleep(CONFIG.requestDelayMs);
         }
@@ -410,14 +250,46 @@ async function main() {
 
     if (selfResult.ok) {
       const quota = selfResult.body?.data?.quota ?? 0;
+      const usedQuota = selfResult.body?.data?.used_quota ?? 0;
       const balance = quotaToUsd(quota);
+      const usedBalance = quotaToUsd(usedQuota);
       totalQuota += Number(quota) || 0;
-      await appendFile(
-        CONFIG.balanceCsvPath,
-        `${acc.username},${quota},${balance}\n`,
-        "utf8",
-      );
+      totalUsedQuota += Number(usedQuota) || 0;
+      const updatedAt = new Date().toISOString();
+      snapshotAccounts.push({
+        username: acc.username,
+        quota: Number(quota) || 0,
+        balance,
+        usedQuota: Number(usedQuota) || 0,
+        usedBalance,
+        updatedAt,
+        status: selfResult.status,
+        newApiUser: acc.newApiUser || "",
+      });
+      await saveAccountPatch(acc.username, {
+        password: acc.password,
+        newApiUser: acc.newApiUser,
+        session: acc.session,
+        lastBalanceAt: updatedAt,
+        lastBalanceQuota: Number(quota) || 0,
+        lastBalance: balance,
+        lastUsedQuota: Number(usedQuota) || 0,
+        lastUsedBalance: usedBalance,
+        lastBalanceStatus: selfResult.status,
+      });
       console.log(`${acc.username}: ${balance}`);
+    } else {
+      totalUsedQuota += Number(acc.lastUsedQuota || 0);
+      snapshotAccounts.push({
+        username: acc.username,
+        quota: Number(acc.lastBalanceQuota || 0),
+        balance: acc.lastBalance || quotaToUsd(acc.lastBalanceQuota || 0),
+        usedQuota: Number(acc.lastUsedQuota || 0),
+        usedBalance: acc.lastUsedBalance || quotaToUsd(acc.lastUsedQuota || 0),
+        updatedAt: new Date().toISOString(),
+        status: selfResult.status,
+        newApiUser: acc.newApiUser || "",
+      });
     }
 
     if (CONFIG.requestDelayMs > 0 && i < accounts.length - 1) {
@@ -426,9 +298,24 @@ async function main() {
   }
 
   console.log(`总余额: ${quotaToUsd(totalQuota)}`);
+  console.log(`总已使用余额: ${quotaToUsd(totalUsedQuota)}`);
+
+  await updateStore(CONFIG.storePath, (latestStore) => {
+    setBalanceSnapshotInStore(latestStore, {
+      updatedAt: new Date().toISOString(),
+      totalQuota,
+      totalBalance: quotaToUsd(totalQuota),
+      totalUsedQuota,
+      totalUsedBalance: quotaToUsd(totalUsedQuota),
+      accounts: snapshotAccounts,
+    });
+    return latestStore;
+  });
 }
 
-main().catch((err) => {
-  console.error("运行失败:", err);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  runBalanceRefresh().catch((err) => {
+    console.error("运行失败:", err);
+    process.exit(1);
+  });
+}

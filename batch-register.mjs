@@ -1,25 +1,19 @@
-import { access, appendFile, readFile, writeFile } from "node:fs/promises";
+import "./env-bootstrap.mjs";
 import { randomBytes } from "node:crypto";
+import {
+  ensureStoreFile,
+  findAccount,
+  readStore,
+  updateStore,
+  upsertAccountInStore,
+} from "./storage.mjs";
 
 const CONFIG = {
-  baseUrl:
-    process.env.REGISTER_URL ||
-    "https://open.lxcloud.dev/api/user/register?turnstile=",
-  loginUrl:
-    process.env.LOGIN_URL ||
-    "https://open.lxcloud.dev/api/user/login?turnstile=",
-  tokenCreateUrl:
-    process.env.TOKEN_CREATE_URL || "https://open.lxcloud.dev/api/token/",
-  tokenListUrl:
-    process.env.TOKEN_LIST_URL ||
-    "https://open.lxcloud.dev/api/token/?p=1&size=10",
+  baseUrl: process.env.BASE_URL || "https://open.lxcloud.dev",
   count: Number(process.env.COUNT || 10),
   requestDelayMs: Number(process.env.DELAY_MS || 5000),
   operationDelayMs: Number(process.env.OP_DELAY_MS || 1000),
-  tokenCsvPath: process.env.TOKEN_CSV_PATH || "./tokens.csv",
-  tokenRawPath: process.env.TOKEN_TXT_PATH || "./tokens.txt",
-  sessionCsvPath: process.env.SESSION_CSV_PATH || "./sessions.csv",
-  userIdCsvPath: process.env.USER_ID_CSV_PATH || "./user-ids.csv",
+  storePath: process.env.STORE_PATH || "./data/store.json",
   tokenNamePrefix: process.env.TOKEN_NAME_PREFIX || "autotoken",
   usernamePrefix: process.env.USERNAME_PREFIX || "u",
   usernameMaxLen: Number(process.env.USERNAME_MAX_LEN || 12),
@@ -30,6 +24,11 @@ const CONFIG = {
   defaultNewApiUser: process.env.NEW_API_USER || "",
   staticAccessToken: process.env.ACCESS_TOKEN || "",
 };
+
+const REGISTER_URL = `${CONFIG.baseUrl}/api/user/register?turnstile=`;
+const LOGIN_URL = `${CONFIG.baseUrl}/api/user/login?turnstile=`;
+const TOKEN_CREATE_URL = `${CONFIG.baseUrl}/api/token/`;
+const TOKEN_LIST_URL = `${CONFIG.baseUrl}/api/token/?p=1&size=10`;
 
 function asBool(value, defaultValue) {
   if (value == null || value === "") {
@@ -44,85 +43,142 @@ function asNumber(value, defaultValue) {
 }
 
 const TOKEN_CONFIG = {
-  remainQuota: asNumber(process.env.TOKEN_REMAIN_QUOTA, 0),
-  expiredTime: asNumber(process.env.TOKEN_EXPIRED_TIME, -1),
-  unlimitedQuota: asBool(process.env.TOKEN_UNLIMITED_QUOTA, true),
-  modelLimitsEnabled: asBool(process.env.TOKEN_MODEL_LIMITS_ENABLED, false),
-  modelLimits: process.env.TOKEN_MODEL_LIMITS || "",
-  crossGroupRetry: asBool(process.env.TOKEN_CROSS_GROUP_RETRY, false),
-  group: process.env.TOKEN_GROUP || "",
-  allowIps: process.env.TOKEN_ALLOW_IPS || "",
+  remainQuota: 0,
+  expiredTime: -1,
+  unlimitedQuota: true,
+  modelLimitsEnabled: false,
+  modelLimits: "",
+  crossGroupRetry: false,
+  group: "",
+  allowIps: "",
 };
+
+function resolveCount(inputCount) {
+  if (inputCount == null || inputCount === "") {
+    return CONFIG.count;
+  }
+
+  const parsed = Number(inputCount);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("COUNT 必须是大于 0 的数字");
+  }
+
+  return Math.floor(parsed);
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function ensureCsvHeader(filePath, headerLine) {
-  try {
-    await access(filePath);
-    const content = await readFile(filePath, "utf8");
-    if (!content.trim()) {
-      await writeFile(filePath, `${headerLine}\n`, "utf8");
-      return;
-    }
-
-    if (!content.startsWith(`${headerLine}\n`) && content !== headerLine) {
-      await writeFile(filePath, `${headerLine}\n${content}`, "utf8");
-    }
-  } catch {
-    await writeFile(filePath, `${headerLine}\n`, "utf8");
-  }
-}
-
-async function ensureFileExists(filePath) {
-  try {
-    await access(filePath);
-  } catch {
-    await writeFile(filePath, "", "utf8");
-  }
-}
-
-async function upsertUserId(username, newApiUser) {
-  if (!username || !newApiUser) {
-    return;
-  }
-
-  await ensureCsvHeader(CONFIG.userIdCsvPath, "username,new_api_user");
-
-  const content = await readFile(CONFIG.userIdCsvPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const header = lines[0] || "username,new_api_user";
-  const rows = lines.slice(1);
-
-  const filtered = rows.filter((line) => {
-    const first = line.split(",")[0]?.trim();
-    return first !== username;
+async function saveAccountPatch(username, patch) {
+  await updateStore(CONFIG.storePath, (store) => {
+    upsertAccountInStore(store, { username, ...patch });
+    return store;
   });
-
-  filtered.push(`${username},${newApiUser}`);
-  await writeFile(CONFIG.userIdCsvPath, `${header}\n${filtered.join("\n")}\n`, "utf8");
 }
 
-async function upsertSession(username, password, newApiUser, session) {
-  if (!username) {
-    return;
+function workflowStateFromResult(result, fallbackMessage) {
+  return {
+    status: result?.ok ? "success" : "failed",
+    lastRunAt: new Date().toISOString(),
+    httpStatus: result?.status ?? null,
+    message:
+      String(
+        result?.response?.message || result?.response?.error || result?.response?.raw || fallbackMessage || "",
+      ).trim(),
+    requestUrl: result?.requestUrl || "",
+    attempt: result?.attempt ?? null,
+  };
+}
+
+async function saveWorkflowStep(username, password, step, result, extraPatch = {}) {
+  await saveAccountPatch(username, {
+    ...(password ? { password } : {}),
+    workflow: {
+      [step]: workflowStateFromResult(result),
+    },
+    ...extraPatch,
+  });
+}
+
+async function registerWithCredential(username, password) {
+  const payload = {
+    username,
+    password,
+    password2: password,
+    email: "",
+    verification_code: "",
+    wechat_verification_code: "",
+    aff_code: "",
+  };
+
+  const startedAt = new Date().toISOString();
+  const requestHeaders = buildHeaders();
+
+  for (let attempt = 1; attempt <= CONFIG.registerMaxRetries + 1; attempt += 1) {
+    try {
+      const res = await fetch(REGISTER_URL, {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify(payload),
+      });
+
+      const parsed = await parseResponseBody(res);
+      const ok = isApiSuccess(res.ok, parsed);
+
+      if (res.status === 429 && attempt <= CONFIG.registerMaxRetries) {
+        const waitMs = computeRateLimitDelay(attempt, res.headers);
+        console.log(
+          `注册限流(429)，30秒后重试(${attempt}/${CONFIG.registerMaxRetries}) 用户=${username}`,
+        );
+        await sleep(waitMs);
+        continue;
+      }
+
+      return {
+        ok,
+        httpOk: res.ok,
+        status: res.status,
+        attempt,
+        startedAt,
+        username,
+        password,
+        requestUrl: REGISTER_URL,
+        requestHeaders,
+        response: parsed,
+      };
+    } catch (error) {
+      if (attempt <= CONFIG.registerMaxRetries) {
+        const waitMs = computeRateLimitDelay(attempt, new Headers());
+        await sleep(waitMs);
+        continue;
+      }
+
+      return {
+        ok: false,
+        status: -1,
+        attempt,
+        startedAt,
+        username,
+        password,
+        requestUrl: REGISTER_URL,
+        requestHeaders,
+        response: { error: String(error?.message || error) },
+      };
+    }
   }
 
-  await ensureCsvHeader(CONFIG.sessionCsvPath, "username,password,new_api_user,session");
-
-  const content = await readFile(CONFIG.sessionCsvPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const header = lines[0] || "username,password,new_api_user,session";
-  const rows = lines.slice(1);
-
-  const filtered = rows.filter((line) => {
-    const first = line.split(",")[0]?.trim();
-    return first !== username;
-  });
-
-  filtered.push(`${username},${password || ""},${newApiUser || ""},${session || ""}`);
-  await writeFile(CONFIG.sessionCsvPath, `${header}\n${filtered.join("\n")}\n`, "utf8");
+  return {
+    ok: false,
+    status: -1,
+    attempt: CONFIG.registerMaxRetries + 1,
+    startedAt,
+    username,
+    password,
+    requestUrl: REGISTER_URL,
+    requestHeaders,
+    response: { error: "register attempts exhausted" },
+  };
 }
 
 function randomText(len = 10) {
@@ -168,8 +224,8 @@ function buildHeaders() {
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
-    Origin: "https://open.lxcloud.dev",
-    Referer: `https://open.lxcloud.dev/register`,
+    Origin: CONFIG.baseUrl,
+    Referer: `${CONFIG.baseUrl}/register`,
     Connection: "keep-alive",
   };
 
@@ -193,8 +249,8 @@ function buildLoginHeaders() {
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
-    Origin: "https://open.lxcloud.dev",
-    Referer: "https://open.lxcloud.dev/login",
+    Origin: CONFIG.baseUrl,
+    Referer: `${CONFIG.baseUrl}/login`,
     Connection: "keep-alive",
   };
 
@@ -325,8 +381,8 @@ function tokenApiHeaders(cookieHeader, newApiUser, includeBody) {
       "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Cache-Control": "no-store",
-    Origin: "https://open.lxcloud.dev",
-    Referer: "https://open.lxcloud.dev/console/token",
+    Origin: CONFIG.baseUrl,
+    Referer: `${CONFIG.baseUrl}/console/token`,
     Connection: "keep-alive",
   };
 
@@ -410,87 +466,7 @@ function isApiSuccess(httpOk, body) {
 
 async function registerOne(index) {
   const { username, password } = generateCredential(index);
-  const payload = {
-    username,
-    password,
-    password2: password,
-    email: "",
-    verification_code: "",
-    wechat_verification_code: "",
-    aff_code: "",
-  };
-
-  const startedAt = new Date().toISOString();
-  const requestHeaders = buildHeaders();
-
-  for (
-    let attempt = 1;
-    attempt <= CONFIG.registerMaxRetries + 1;
-    attempt += 1
-  ) {
-    try {
-      const res = await fetch(CONFIG.baseUrl, {
-        method: "POST",
-        headers: requestHeaders,
-        body: JSON.stringify(payload),
-      });
-
-      const parsed = await parseResponseBody(res);
-      const ok = isApiSuccess(res.ok, parsed);
-
-      if (res.status === 429 && attempt <= CONFIG.registerMaxRetries) {
-        const waitMs = computeRateLimitDelay(attempt, res.headers);
-        console.log(
-          `[${index}] 注册限流(429)，30秒后重试(${attempt}/${CONFIG.registerMaxRetries}) 用户=${username}`,
-        );
-        await sleep(waitMs);
-        continue;
-      }
-
-      return {
-        ok,
-        httpOk: res.ok,
-        status: res.status,
-        attempt,
-        startedAt,
-        username,
-        password,
-        requestUrl: CONFIG.baseUrl,
-        requestHeaders,
-        response: parsed,
-      };
-    } catch (error) {
-      if (attempt <= CONFIG.registerMaxRetries) {
-        const waitMs = computeRateLimitDelay(attempt, new Headers());
-        await sleep(waitMs);
-        continue;
-      }
-
-      return {
-        ok: false,
-        status: -1,
-        attempt,
-        startedAt,
-        username,
-        password,
-        requestUrl: CONFIG.baseUrl,
-        requestHeaders,
-        response: { error: String(error?.message || error) },
-      };
-    }
-  }
-
-  return {
-    ok: false,
-    status: -1,
-    attempt: CONFIG.registerMaxRetries + 1,
-    startedAt,
-    username,
-    password,
-    requestUrl: CONFIG.baseUrl,
-    requestHeaders,
-    response: { error: "register attempts exhausted" },
-  };
+  return registerWithCredential(username, password);
 }
 
 async function loginOne(username, password) {
@@ -499,7 +475,7 @@ async function loginOne(username, password) {
 
   try {
     const requestHeaders = buildLoginHeaders();
-    const res = await fetch(CONFIG.loginUrl, {
+    const res = await fetch(LOGIN_URL, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(payload),
@@ -527,7 +503,7 @@ async function loginOne(username, password) {
       status: res.status,
       startedAt,
       username,
-      requestUrl: CONFIG.loginUrl,
+      requestUrl: LOGIN_URL,
       requestHeaders,
       responseSetCookieRaw: res.headers.get("set-cookie") || "",
       response: parsed,
@@ -542,7 +518,7 @@ async function loginOne(username, password) {
       status: -1,
       startedAt,
       username,
-      requestUrl: CONFIG.loginUrl,
+      requestUrl: LOGIN_URL,
       requestHeaders: buildLoginHeaders(),
       responseSetCookieRaw: "",
       response: { error: String(error?.message || error) },
@@ -631,7 +607,7 @@ async function createTokenOne(loginResult) {
         : {}),
     };
 
-    const res = await fetch(CONFIG.tokenCreateUrl, {
+    const res = await fetch(TOKEN_CREATE_URL, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(payload),
@@ -646,7 +622,7 @@ async function createTokenOne(loginResult) {
       status: res.status,
       startedAt,
       username: loginResult.username,
-      requestUrl: CONFIG.tokenCreateUrl,
+      requestUrl: TOKEN_CREATE_URL,
       requestHeaders,
       tokenName: name,
       tokenId: extractTokenId(parsed),
@@ -659,7 +635,7 @@ async function createTokenOne(loginResult) {
       status: -1,
       startedAt,
       username: loginResult.username,
-      requestUrl: CONFIG.tokenCreateUrl,
+      requestUrl: TOKEN_CREATE_URL,
       requestHeaders: {
         ...tokenApiHeaders(loginResult.cookieHeader, loginResult.newApiUser, true),
         ...(loginResult.accessToken
@@ -685,7 +661,7 @@ async function listTokensOne(loginResult) {
           : {}),
     };
 
-    const res = await fetch(CONFIG.tokenListUrl, {
+    const res = await fetch(TOKEN_LIST_URL, {
       method: "GET",
       headers: requestHeaders,
     });
@@ -699,7 +675,7 @@ async function listTokensOne(loginResult) {
       status: res.status,
       startedAt,
       username: loginResult.username,
-      requestUrl: CONFIG.tokenListUrl,
+      requestUrl: TOKEN_LIST_URL,
       requestHeaders,
       response: parsed,
     };
@@ -709,7 +685,7 @@ async function listTokensOne(loginResult) {
       status: -1,
       startedAt,
       username: loginResult.username,
-      requestUrl: CONFIG.tokenListUrl,
+      requestUrl: TOKEN_LIST_URL,
       requestHeaders: {
         ...tokenApiHeaders(loginResult.cookieHeader, loginResult.newApiUser, false),
         ...(loginResult.accessToken
@@ -721,15 +697,9 @@ async function listTokensOne(loginResult) {
   }
 }
 
-async function main() {
-  if (!Number.isFinite(CONFIG.count) || CONFIG.count <= 0) {
-    throw new Error("COUNT 必须是大于 0 的数字");
-  }
-
-  await ensureCsvHeader(CONFIG.tokenCsvPath, "username,password,token");
-  await ensureFileExists(CONFIG.tokenRawPath);
-  await ensureCsvHeader(CONFIG.sessionCsvPath, "username,password,new_api_user,session");
-  await ensureCsvHeader(CONFIG.userIdCsvPath, "username,new_api_user");
+export async function runBatchRegister(inputCount) {
+  const targetCount = resolveCount(inputCount);
+  await ensureStoreFile(CONFIG.storePath);
 
   let success = 0;
   let failed = 0;
@@ -740,120 +710,228 @@ async function main() {
   let tokenListSuccess = 0;
   let tokenListFailed = 0;
 
-  for (let i = 0; i < CONFIG.count; i += 1) {
-    const result = await registerOne(i + 1);
+  for (let i = 0; i < targetCount; i += 1) {
+    const registerResult = await registerOne(i + 1);
+    await saveWorkflowStep(
+      registerResult.username,
+      registerResult.password,
+      "register",
+      registerResult,
+    );
 
-    if (result.ok) {
-      success += 1;
-      console.log(
-        `[${i + 1}/${CONFIG.count}] 注册成功(${result.status}) ${result.username}`,
-      );
-
-      if (CONFIG.operationDelayMs > 0) {
-        await sleep(CONFIG.operationDelayMs);
-      }
-      const loginResult = await loginOne(result.username, result.password);
-      if (loginResult.ok) {
-        loginSuccess += 1;
-        const sessionCookie = pickSessionCookie(extractCookiePairs(loginResult.setCookies));
-        await upsertSession(
-          result.username,
-          result.password,
-          loginResult.newApiUser,
-          sessionCookie,
-        );
-        if (loginResult.newApiUser) {
-          await upsertUserId(result.username, loginResult.newApiUser);
-        }
-        console.log(
-          `[${i + 1}/${CONFIG.count}] 登录成功(${loginResult.status}) ${result.username}`,
-        );
-
-        if (CONFIG.operationDelayMs > 0) {
-          await sleep(CONFIG.operationDelayMs);
-        }
-        const tokenCreateResult = await createTokenOne(loginResult);
-
-        if (tokenCreateResult.ok) {
-          tokenCreateSuccess += 1;
-          console.log(
-            `[${i + 1}/${CONFIG.count}] 创建令牌成功(${tokenCreateResult.status}) ${result.username}`,
-          );
-        } else {
-          tokenCreateFailed += 1;
-          console.log(
-            `[${i + 1}/${CONFIG.count}] 创建令牌失败(${tokenCreateResult.status}) ${result.username}`,
-          );
-        }
-
-        if (CONFIG.operationDelayMs > 0) {
-          await sleep(CONFIG.operationDelayMs);
-        }
-        const tokenListResult = await listTokensOne(loginResult);
-
-        if (tokenListResult.ok) {
-          tokenListSuccess += 1;
-          console.log(
-            `[${i + 1}/${CONFIG.count}] 令牌列表成功(${tokenListResult.status}) ${result.username}`,
-          );
-        } else {
-          tokenListFailed += 1;
-          console.log(
-            `[${i + 1}/${CONFIG.count}] 令牌列表失败(${tokenListResult.status}) ${result.username}`,
-          );
-        }
-
-        if (tokenCreateResult.ok) {
-          const tokenFromList = tokenListResult.ok
-            ? extractTokenFromList(
-                tokenListResult.response,
-                tokenCreateResult.tokenName,
-              )
-            : "";
-          const finalTokenValue =
-            "sk-" + (tokenCreateResult.tokenValue || tokenFromList);
-
-          await appendFile(
-            CONFIG.tokenCsvPath,
-            `${result.username},${result.password},${finalTokenValue}\n`,
-            "utf8",
-          );
-
-          if (finalTokenValue) {
-            await appendFile(
-              CONFIG.tokenRawPath,
-              `${finalTokenValue}\n`,
-              "utf8",
-            );
-          }
-        }
-      } else {
-        loginFailed += 1;
-        const reason = loginResult?.response?.message
-          ? ` - ${loginResult.response.message}`
-          : "";
-        console.log(
-          `[${i + 1}/${CONFIG.count}] 登录失败(${loginResult.status}) ${result.username}${reason}`,
-        );
-      }
-    } else {
+    if (!registerResult.ok) {
       failed += 1;
       console.log(
-        `[${i + 1}/${CONFIG.count}] 注册失败(${result.status}) ${result.username}`,
+        `[${i + 1}/${targetCount}] 注册失败(${registerResult.status}) ${registerResult.username}`,
       );
+
+      if (i < targetCount - 1 && CONFIG.requestDelayMs > 0) {
+        await sleep(CONFIG.requestDelayMs);
+      }
+      continue;
     }
 
-    if (i < CONFIG.count - 1 && CONFIG.requestDelayMs > 0) {
+    success += 1;
+    console.log(
+      `[${i + 1}/${targetCount}] 注册成功(${registerResult.status}) ${registerResult.username}`,
+    );
+
+    if (CONFIG.operationDelayMs > 0) {
+      await sleep(CONFIG.operationDelayMs);
+    }
+
+    const loginResult = await loginOne(registerResult.username, registerResult.password);
+    const sessionCookie = pickSessionCookie(extractCookiePairs(loginResult.setCookies));
+    await saveWorkflowStep(registerResult.username, registerResult.password, "login", loginResult, {
+      newApiUser: loginResult.newApiUser,
+      session: sessionCookie,
+      lastLoginAt: loginResult.ok ? new Date().toISOString() : null,
+    });
+
+    if (!loginResult.ok) {
+      loginFailed += 1;
+      const reason = loginResult?.response?.message ? ` - ${loginResult.response.message}` : "";
+      console.log(
+        `[${i + 1}/${targetCount}] 登录失败(${loginResult.status}) ${registerResult.username}${reason}`,
+      );
+
+      if (i < targetCount - 1 && CONFIG.requestDelayMs > 0) {
+        await sleep(CONFIG.requestDelayMs);
+      }
+      continue;
+    }
+
+    loginSuccess += 1;
+    console.log(
+      `[${i + 1}/${targetCount}] 登录成功(${loginResult.status}) ${registerResult.username}`,
+    );
+
+    if (CONFIG.operationDelayMs > 0) {
+      await sleep(CONFIG.operationDelayMs);
+    }
+
+    const tokenCreateResult = await createTokenOne(loginResult);
+    await saveWorkflowStep(
+      registerResult.username,
+      registerResult.password,
+      "tokenCreate",
+      tokenCreateResult,
+    );
+
+    if (!tokenCreateResult.ok) {
+      tokenCreateFailed += 1;
+      console.log(
+        `[${i + 1}/${targetCount}] 创建令牌失败(${tokenCreateResult.status}) ${registerResult.username}`,
+      );
+
+      if (i < targetCount - 1 && CONFIG.requestDelayMs > 0) {
+        await sleep(CONFIG.requestDelayMs);
+      }
+      continue;
+    }
+
+    tokenCreateSuccess += 1;
+    console.log(
+      `[${i + 1}/${targetCount}] 创建令牌成功(${tokenCreateResult.status}) ${registerResult.username}`,
+    );
+
+    if (CONFIG.operationDelayMs > 0) {
+      await sleep(CONFIG.operationDelayMs);
+    }
+
+    const tokenListResult = await listTokensOne(loginResult);
+    const tokenFromList = tokenListResult.ok
+      ? extractTokenFromList(tokenListResult.response, tokenCreateResult.tokenName)
+      : "";
+    const finalTokenValue = `sk-${tokenCreateResult.tokenValue || tokenFromList}`;
+
+    await saveWorkflowStep(
+      registerResult.username,
+      registerResult.password,
+      "tokenList",
+      tokenListResult,
+      {
+        token: tokenListResult.ok ? finalTokenValue : "",
+        session: sessionCookie,
+        newApiUser: loginResult.newApiUser,
+      },
+    );
+
+    if (!tokenListResult.ok) {
+      tokenListFailed += 1;
+      console.log(
+        `[${i + 1}/${targetCount}] 令牌列表失败(${tokenListResult.status}) ${registerResult.username}`,
+      );
+
+      if (i < targetCount - 1 && CONFIG.requestDelayMs > 0) {
+        await sleep(CONFIG.requestDelayMs);
+      }
+      continue;
+    }
+
+    tokenListSuccess += 1;
+    console.log(
+      `[${i + 1}/${targetCount}] 令牌列表成功(${tokenListResult.status}) ${registerResult.username}`,
+    );
+
+    if (i < targetCount - 1 && CONFIG.requestDelayMs > 0) {
       await sleep(CONFIG.requestDelayMs);
     }
   }
 
+  const summary = {
+    requestedCount: targetCount,
+    register: { success, failed },
+    login: { success: loginSuccess, failed: loginFailed },
+    tokenCreate: { success: tokenCreateSuccess, failed: tokenCreateFailed },
+    tokenList: { success: tokenListSuccess, failed: tokenListFailed },
+  };
+
   console.log(
     `完成：注册 成功${success}/失败${failed}，登录 成功${loginSuccess}/失败${loginFailed}，创建令牌 成功${tokenCreateSuccess}/失败${tokenCreateFailed}，查询令牌 成功${tokenListSuccess}/失败${tokenListFailed}`,
   );
+
+  return summary;
 }
 
-main().catch((err) => {
-  console.error("运行失败:", err);
-  process.exit(1);
-});
+export async function retryAccountWorkflow(username, step) {
+  const allowedSteps = new Set(["register", "login", "tokenCreate", "tokenList"]);
+  if (!allowedSteps.has(step)) {
+    throw new Error("Invalid workflow step");
+  }
+
+  const store = await readStore(CONFIG.storePath);
+  const account = findAccount(store, username);
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  let currentUsername = account.username;
+  let currentPassword = account.password;
+  let loginResult = null;
+
+  if (step === "register") {
+    if (!currentUsername || !currentPassword) {
+      throw new Error("Account username and password are required for register retry");
+    }
+
+    const registerResult = await registerWithCredential(currentUsername, currentPassword);
+    await saveWorkflowStep(currentUsername, currentPassword, "register", registerResult);
+    if (!registerResult.ok) {
+      return { username: currentUsername, step, result: registerResult };
+    }
+  }
+
+  if (["login", "tokenCreate", "tokenList"].includes(step)) {
+    if (!currentUsername || !currentPassword) {
+      throw new Error("Account username and password are required for login retry");
+    }
+
+    loginResult = await loginOne(currentUsername, currentPassword);
+    const sessionCookie = pickSessionCookie(extractCookiePairs(loginResult.setCookies));
+    await saveWorkflowStep(currentUsername, currentPassword, "login", loginResult, {
+      newApiUser: loginResult.newApiUser || account.newApiUser,
+      session: sessionCookie || account.session,
+      lastLoginAt: loginResult.ok ? new Date().toISOString() : account.lastLoginAt,
+    });
+
+    if (!loginResult.ok) {
+      return { username: currentUsername, step: "login", result: loginResult };
+    }
+  }
+
+  if (["tokenCreate", "tokenList"].includes(step)) {
+    const tokenCreateResult = await createTokenOne(loginResult);
+    await saveWorkflowStep(currentUsername, currentPassword, "tokenCreate", tokenCreateResult);
+    if (!tokenCreateResult.ok) {
+      return { username: currentUsername, step: "tokenCreate", result: tokenCreateResult };
+    }
+
+    const tokenListResult = await listTokensOne(loginResult);
+    const tokenFromList = tokenListResult.ok
+      ? extractTokenFromList(tokenListResult.response, tokenCreateResult.tokenName)
+      : "";
+    const finalTokenValue = tokenCreateResult.ok
+      ? `sk-${tokenCreateResult.tokenValue || tokenFromList}`
+      : account.token;
+
+    await saveWorkflowStep(currentUsername, currentPassword, "tokenList", tokenListResult, {
+      token: finalTokenValue || account.token,
+      session: loginResult.cookieHeader || account.session,
+      newApiUser: loginResult.newApiUser || account.newApiUser,
+    });
+
+    if (!tokenListResult.ok) {
+      return { username: currentUsername, step: "tokenList", result: tokenListResult };
+    }
+  }
+
+  return { username: currentUsername, step, ok: true };
+}
+
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  runBatchRegister().catch((err) => {
+    console.error("运行失败:", err);
+    process.exit(1);
+  });
+}

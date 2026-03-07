@@ -45,17 +45,32 @@ if [ ! -f "$INSTALL_DIR/.env" ]; then
   echo "Created $INSTALL_DIR/.env from template. Please fill in the required values before first successful run."
 fi
 
-touch \
-  "$INSTALL_DIR/data/tokens.txt" \
-  "$INSTALL_DIR/data/tokens.csv" \
-  "$INSTALL_DIR/data/sessions.csv" \
-  "$INSTALL_DIR/data/balances.csv" \
-  "$INSTALL_DIR/data/user-ids.csv" \
-  "$INSTALL_DIR/data/checkin-results.csv"
+if [ ! -f "$INSTALL_DIR/data/store.json" ]; then
+  cat > "$INSTALL_DIR/data/store.json" <<'EOF'
+{
+  "accounts": [],
+  "checkins": [],
+  "balanceSnapshot": {
+    "updatedAt": null,
+    "totalQuota": 0,
+    "totalBalance": "$0.00",
+    "accounts": []
+  },
+  "metadata": {
+    "version": 1,
+    "createdAt": null,
+    "updatedAt": null
+  }
+}
+EOF
+fi
+
+touch "$INSTALL_DIR/data/tokens.txt" "$INSTALL_DIR/data/tokens.csv"
 
 docker compose -f "$INSTALL_DIR/compose.yaml" --env-file "$INSTALL_DIR/.env" pull
 docker compose -f "$INSTALL_DIR/compose.yaml" --env-file "$INSTALL_DIR/.env" up -d
 
 echo "Installed to $INSTALL_DIR"
-echo "Edit $INSTALL_DIR/.env and files in $INSTALL_DIR/data as needed, then run:"
+echo "API endpoint: http://<server-ip>:3000/api/balances"
+echo "Edit $INSTALL_DIR/.env and $INSTALL_DIR/data/store.json as needed, then run:"
 echo "docker compose -f $INSTALL_DIR/compose.yaml --env-file $INSTALL_DIR/.env restart"
