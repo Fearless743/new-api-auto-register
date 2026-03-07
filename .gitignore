@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.local
+.DS_Store
+
+tokens.txt
+tokens.csv
+sessions.csv
+balances.csv
+user-ids.csv
+checkin-results.csv
+data/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

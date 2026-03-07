@@ -1,0 +1,12 @@
+node_modules/
+.git/
+.github/
+.env
+.env.local
+tokens.txt
+tokens.csv
+sessions.csv
+balances.csv
+user-ids.csv
+checkin-results.csv
+data/

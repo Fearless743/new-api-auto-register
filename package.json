@@ -1,0 +1,17 @@
+{
+  "name": "new-api-auto-register",
+  "version": "1.0.0",
+  "description": "Sequential account registration tester for a self-owned API",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "node-cron": "^3.0.3"
+  },
+  "scripts": {
+    "start": "node batch-register.mjs",
+    "query:balance": "node query-balance.mjs",
+    "checkin": "node checkin.mjs",
+    "checkin:cron": "node checkin-cron.mjs",
+    "upload:tokens": "node upload-tokens.mjs"
+  }
+}
