@@ -132,6 +132,24 @@ async function requestUploadTokens() {
   });
 }
 
+async function requestRegisterStatus() {
+  return request(apiBase + "/registers/status", {
+    headers: adminHeaders(),
+  });
+}
+
+async function requestCheckinTaskStatus() {
+  return request(apiBase + "/checkins/status", {
+    headers: adminHeaders(),
+  });
+}
+
+async function requestStatusRefreshTaskStatus() {
+  return request(apiBase + "/status", {
+    headers: adminHeaders(),
+  });
+}
+
 function buildStats(summary, balanceSnapshot) {
   const allSummary = (summary && summary.all) || {};
   const remainingQuota = Number(balanceSnapshot && balanceSnapshot.totalQuota) || 0;
@@ -152,6 +170,111 @@ function buildStats(summary, balanceSnapshot) {
     balanceTotal: quotaToUsd(totalQuota),
     balanceUpdated: formatTime(balanceSnapshot && balanceSnapshot.updatedAt),
   };
+}
+
+function registerStatusAlertProps(registerTask) {
+  if (!registerTask) {
+    return {
+      type: "info",
+      message: "批量注册任务准备就绪",
+      description: "点击“批量注册”后将立即返回，任务在后台异步执行。",
+    };
+  }
+
+  if (registerTask.running) {
+    return {
+      type: "info",
+      message: "批量注册任务后台运行中",
+      description: "当前请求数量 " + (registerTask.requestedCount || 0) + "，管理页会自动轮询最新状态。",
+    };
+  }
+
+  if (registerTask.error) {
+    return {
+      type: "error",
+      message: "批量注册任务执行失败",
+      description: registerTask.error,
+    };
+  }
+
+  if (registerTask.finishedAt) {
+    const summary = registerTask.summary || {};
+    return {
+      type: "success",
+      message: "批量注册任务已完成",
+      description: "本次请求 " + (registerTask.requestedCount || 0) + " 个账号，成功返回结果。",
+    };
+  }
+
+  return {
+    type: "info",
+    message: "批量注册任务准备就绪",
+    description: "点击“批量注册”后将立即返回，任务在后台异步执行。",
+  };
+}
+
+function backgroundTaskAlertProps(task, options) {
+  if (!task) {
+    return {
+      type: "info",
+      message: options.idleMessage,
+      description: options.idleDescription,
+    };
+  }
+
+  if (task.running) {
+    return {
+      type: "info",
+      message: options.runningMessage,
+      description: options.runningDescription,
+    };
+  }
+
+  if (task.error) {
+    return {
+      type: "error",
+      message: options.errorMessage,
+      description: task.error,
+    };
+  }
+
+  if (task.finishedAt) {
+    return {
+      type: "success",
+      message: options.finishedMessage,
+      description: options.finishedDescription,
+    };
+  }
+
+  return {
+    type: "info",
+    message: options.idleMessage,
+    description: options.idleDescription,
+  };
+}
+
+function checkinStatusAlertProps(checkinTask) {
+  return backgroundTaskAlertProps(checkinTask, {
+    idleMessage: "批量签到任务准备就绪",
+    idleDescription: "点击后会立即返回，签到任务在后台异步执行。",
+    runningMessage: "批量签到任务后台运行中",
+    runningDescription: "管理页会自动轮询任务状态，并在完成后刷新账号列表。",
+    errorMessage: "批量签到任务执行失败",
+    finishedMessage: "批量签到任务已完成",
+    finishedDescription: "最近一次后台签到任务已经结束。",
+  });
+}
+
+function balanceStatusAlertProps(balanceTask) {
+  return backgroundTaskAlertProps(balanceTask, {
+    idleMessage: "状态刷新任务准备就绪",
+    idleDescription: "点击后会立即返回，状态刷新在后台异步执行。",
+    runningMessage: "状态刷新任务后台运行中",
+    runningDescription: "管理页会自动轮询任务状态，并在完成后刷新余额、签到状态与账号列表。",
+    errorMessage: "状态刷新任务执行失败",
+    finishedMessage: "状态刷新任务已完成",
+    finishedDescription: "最近一次后台状态刷新已经结束。",
+  });
 }
 
 function AccountWorkflow({ account }) {
@@ -295,6 +418,9 @@ function Dashboard() {
   const [accounts, setAccounts] = useState([]);
   const [accountsSummary, setAccountsSummary] = useState(null);
   const [balanceSnapshot, setBalanceSnapshot] = useState(null);
+  const [checkinTask, setCheckinTask] = useState(null);
+  const [balanceTask, setBalanceTask] = useState(null);
+  const [registerTask, setRegisterTask] = useState(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [registerCount, setRegisterCount] = useState(5);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
@@ -307,6 +433,18 @@ function Dashboard() {
   const stats = useMemo(function () {
     return buildStats(accountsSummary, balanceSnapshot);
   }, [accountsSummary, balanceSnapshot]);
+
+  const registerAlert = useMemo(function () {
+    return registerStatusAlertProps(registerTask);
+  }, [registerTask]);
+
+  const checkinAlert = useMemo(function () {
+    return checkinStatusAlertProps(checkinTask);
+  }, [checkinTask]);
+
+  const balanceAlert = useMemo(function () {
+    return balanceStatusAlertProps(balanceTask);
+  }, [balanceTask]);
 
   const selectedAccounts = useMemo(function () {
     return accounts.filter(function (account) {
@@ -379,9 +517,105 @@ function Dashboard() {
     }
   }
 
+  async function loadRegisterStatus(silent) {
+    try {
+      const data = await requestRegisterStatus();
+      setRegisterTask(data || null);
+      return data || null;
+    } catch (error) {
+      if (!silent) {
+        message.error(error.message);
+      }
+      return null;
+    }
+  }
+
+  async function loadCheckinTaskStatus(silent) {
+    try {
+      const data = await requestCheckinTaskStatus();
+      setCheckinTask(data || null);
+      return data || null;
+    } catch (error) {
+      if (!silent) {
+        message.error(error.message);
+      }
+      return null;
+    }
+  }
+
+  async function loadBalanceTaskStatus(silent) {
+    try {
+      const data = await requestStatusRefreshTaskStatus();
+      setBalanceTask(data || null);
+      return data || null;
+    } catch (error) {
+      if (!silent) {
+        message.error(error.message);
+      }
+      return null;
+    }
+  }
+
   useEffect(function () {
     void loadAccounts();
+    void loadRegisterStatus(true);
+    void loadCheckinTaskStatus(true);
+    void loadBalanceTaskStatus(true);
   }, []);
+
+  useEffect(function () {
+    if (!(registerTask && registerTask.running)) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(function () {
+      void loadRegisterStatus(true).then(function (data) {
+        if (data && !data.running) {
+          void loadAccounts(true, 1, pagination.pageSize, filters);
+        }
+      });
+    }, 3000);
+
+    return function () {
+      window.clearInterval(timer);
+    };
+  }, [registerTask && registerTask.running, pagination.pageSize, filters]);
+
+  useEffect(function () {
+    if (!(checkinTask && checkinTask.running)) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(function () {
+      void loadCheckinTaskStatus(true).then(function (data) {
+        if (data && !data.running) {
+          void loadAccounts(true, pagination.current, pagination.pageSize, filters);
+        }
+      });
+    }, 3000);
+
+    return function () {
+      window.clearInterval(timer);
+    };
+  }, [checkinTask && checkinTask.running, pagination.current, pagination.pageSize, filters]);
+
+  useEffect(function () {
+    if (!(balanceTask && balanceTask.running)) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(function () {
+      void loadBalanceTaskStatus(true).then(function (data) {
+        if (data && !data.running) {
+          void loadAccounts(true, pagination.current, pagination.pageSize, filters);
+        }
+      });
+    }, 3000);
+
+    return function () {
+      window.clearInterval(timer);
+    };
+  }, [balanceTask && balanceTask.running, pagination.current, pagination.pageSize, filters]);
 
   useEffect(function () {
     const timer = window.setTimeout(function () {
@@ -471,34 +705,24 @@ function Dashboard() {
   }
 
   async function checkinMany(accounts) {
-    const targets = accounts.filter(function (account) {
-      return !(account.checkinStatus && account.checkinStatus.checkedInToday);
-    });
-
-    if (!targets.length) {
-      message.info("目标账号今天都已经签到");
-      return;
-    }
-
     setBusyKey("checkin-many");
-    let successCount = 0;
-    let failedCount = 0;
-
-    for (let index = 0; index < targets.length; index += 1) {
-      try {
-        await request(apiBase + "/accounts/" + encodeURIComponent(targets[index].username) + "/checkin", {
-          method: "POST",
-          headers: adminHeaders(),
-        });
-        successCount += 1;
-      } catch {
-        failedCount += 1;
+    try {
+      const data = await request(apiBase + "/checkins", {
+        method: "POST",
+        headers: adminHeaders(),
+      });
+      if (data.alreadyRunning) {
+        message.info("批量签到任务已在后台运行中");
+      } else {
+        message.success("批量签到任务已启动，后台处理中");
       }
+      setCheckinTask(data || null);
+      await loadAccounts(true, pagination.current, pagination.pageSize, filters);
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setBusyKey("");
     }
-
-    message.success("批量签到完成：成功 " + successCount + "，失败 " + failedCount);
-    await loadAccounts(true, pagination.current, pagination.pageSize, filters);
-    setBusyKey("");
   }
 
   async function retryMany(actions) {
@@ -538,7 +762,13 @@ function Dashboard() {
         headers: Object.assign({ "Content-Type": "application/json" }, adminHeaders()),
         body: JSON.stringify({ count: Number(registerCount || 0) || 1 }),
       });
-      message.success("批量注册完成：请求 " + (((data.summary || {}).requestedCount) || 0) + " 个账号");
+      const requestedCount = Number(data.requestedCount) || Number(registerCount || 0) || 1;
+      if (data.alreadyRunning) {
+        message.info("批量注册任务已在后台运行中");
+      } else {
+        message.success("批量注册任务已启动，后台处理中：请求 " + requestedCount + " 个账号");
+      }
+      setRegisterTask(data || null);
       await loadAccounts(true, 1, pagination.pageSize, filters);
     } catch (error) {
       message.error(error.message);
@@ -562,17 +792,17 @@ function Dashboard() {
   async function handleRefreshAll() {
     setBusyKey("refresh-all");
     try {
-      const balanceData = await request(apiBase + "/balances");
-      setBalanceSnapshot(balanceData || null);
-
-      if (accounts.length) {
-        await refreshCheckinStatuses(accounts, { skipReload: true, skipDoneMessage: true });
-        await loadAccounts(true, pagination.current, pagination.pageSize, filters);
+      const data = await request(apiBase + "/status/refresh", {
+        method: "POST",
+        headers: adminHeaders(),
+      });
+      if (data.alreadyRunning) {
+        message.info("状态刷新任务已在后台运行中");
       } else {
-        await loadAccounts(true, pagination.current, pagination.pageSize, filters);
+        message.success("状态刷新任务已启动，后台处理中");
       }
-
-      message.success("状态与签到已刷新");
+      setBalanceTask(data || null);
+      await loadAccounts(true, pagination.current, pagination.pageSize, filters);
     } catch (error) {
       message.error(error.message);
     } finally {
@@ -684,6 +914,54 @@ function Dashboard() {
                 <Button onClick={handleUploadTokens} loading={busyKey === "upload-tokens"}>上传全部 Token（自动去重）</Button>
               </Space>
 
+              <Row gutter={[16, 16]}>
+                <Col xs={24} xl={8}>
+                  <Card size="small">
+                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                      <Alert type={registerAlert.type} message={registerAlert.message} description={registerAlert.description} showIcon />
+                      <Descriptions column={2} size="small">
+                        <Descriptions.Item label="请求数量">{registerTask && registerTask.requestedCount ? registerTask.requestedCount : "--"}</Descriptions.Item>
+                        <Descriptions.Item label="运行状态">
+                          {registerTask && registerTask.running ? <Tag color="processing">运行中</Tag> : <Tag color="default">空闲</Tag>}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="开始时间">{formatTime(registerTask && registerTask.startedAt)}</Descriptions.Item>
+                        <Descriptions.Item label="结束时间">{formatTime(registerTask && registerTask.finishedAt)}</Descriptions.Item>
+                      </Descriptions>
+                    </Space>
+                  </Card>
+                </Col>
+                <Col xs={24} xl={8}>
+                  <Card size="small">
+                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                      <Alert type={checkinAlert.type} message={checkinAlert.message} description={checkinAlert.description} showIcon />
+                      <Descriptions column={2} size="small">
+                        <Descriptions.Item label="任务类型">批量签到</Descriptions.Item>
+                        <Descriptions.Item label="运行状态">
+                          {checkinTask && checkinTask.running ? <Tag color="processing">运行中</Tag> : <Tag color="default">空闲</Tag>}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="开始时间">{formatTime(checkinTask && checkinTask.startedAt)}</Descriptions.Item>
+                        <Descriptions.Item label="结束时间">{formatTime(checkinTask && checkinTask.finishedAt)}</Descriptions.Item>
+                      </Descriptions>
+                    </Space>
+                  </Card>
+                </Col>
+                <Col xs={24} xl={8}>
+                  <Card size="small">
+                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                      <Alert type={balanceAlert.type} message={balanceAlert.message} description={balanceAlert.description} showIcon />
+                      <Descriptions column={2} size="small">
+                        <Descriptions.Item label="任务类型">余额刷新</Descriptions.Item>
+                        <Descriptions.Item label="运行状态">
+                          {balanceTask && balanceTask.running ? <Tag color="processing">运行中</Tag> : <Tag color="default">空闲</Tag>}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="开始时间">{formatTime(balanceTask && balanceTask.startedAt)}</Descriptions.Item>
+                        <Descriptions.Item label="结束时间">{formatTime(balanceTask && balanceTask.finishedAt)}</Descriptions.Item>
+                      </Descriptions>
+                    </Space>
+                  </Card>
+                </Col>
+              </Row>
+
               <Space wrap>
                 <Input
                   style={{ width: 260 }}
@@ -701,6 +979,7 @@ function Dashboard() {
                     { value: "failed-only", label: "仅看失败" },
                     { value: "success-only", label: "仅看全成功" },
                     { value: "idle-only", label: "仅看未执行" },
+                    { value: "unchecked-only", label: "仅看未签到" },
                   ]}
                   onChange={function (value) {
                     setFilters(Object.assign({}, filters, { statusMode: value }));
@@ -744,8 +1023,6 @@ function Dashboard() {
                 </Button>
                 <Button onClick={handleRefreshAll} loading={busyKey === "refresh-all"}>刷新状态</Button>
               </Space>
-
-              <Alert type="info" message="准备就绪" showIcon />
 
               {loading ? (
                 <div style={{ textAlign: "center", padding: 48 }}><Spin size="large" /></div>

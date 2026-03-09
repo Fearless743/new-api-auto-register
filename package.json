@@ -14,7 +14,6 @@
   },
   "scripts": {
     "build:management": "node build-management.mjs",
-    "start": "node service.mjs",
     "register": "node batch-register.mjs",
     "import:legacy": "node import-legacy-data.mjs",
     "query:balance": "node query-balance.mjs",

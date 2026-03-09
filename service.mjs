@@ -8,6 +8,7 @@ import {
   manualCheckin,
   refreshAccountCheckinStatus,
   runCheckin,
+  runCheckinStatusRefresh,
 } from "./checkin.mjs";
 import { runBalanceRefresh } from "./query-balance.mjs";
 import { ensureStoreFile, readStore } from "./storage.mjs";
@@ -23,6 +24,7 @@ const CONFIG = {
     process.env.CHECKIN_CRON_TZ ||
     "Asia/Shanghai",
   checkinCronExpr: process.env.CHECKIN_CRON_EXPR || "0 0 * * *",
+  checkinMonitorCronExpr: process.env.CHECKIN_MONITOR_CRON_EXPR || "*/30 * * * *",
   checkinCronTz: process.env.CHECKIN_CRON_TZ || "Asia/Shanghai",
   runCheckinOnStart:
     String(process.env.CHECKIN_RUN_ON_START || "false").toLowerCase() === "true",
@@ -41,6 +43,17 @@ let checkinRunning = false;
 let balanceRunning = false;
 let registerRunning = false;
 let uploadTokensRunning = false;
+let checkinLastStartedAt = null;
+let checkinLastFinishedAt = null;
+let checkinLastError = "";
+let balanceLastStartedAt = null;
+let balanceLastFinishedAt = null;
+let balanceLastError = "";
+let registerLastRequestedCount = 0;
+let registerLastStartedAt = null;
+let registerLastFinishedAt = null;
+let registerLastSummary = null;
+let registerLastError = "";
 
 function json(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
@@ -93,6 +106,11 @@ function filterAccounts(accounts, filters) {
     const checkinFailed = account.lastCheckin && account.lastCheckin.success === false;
     const checkinIdle = !checkinStatus.updatedAt;
     const checkinSuccess = checkinStatus.checkedInToday === true;
+    const checkinPending = checkinStatus.updatedAt && checkinStatus.checkedInToday === false;
+
+    if (statusMode === "unchecked-only") {
+      return Boolean(checkinPending);
+    }
 
     if (selectedStep === "checkin") {
       if (statusMode === "failed-only") return checkinFailed || checkinStatus.checkedInToday === false;
@@ -236,67 +254,196 @@ function buildPath(pathname) {
   return `${prefix}${pathname}`;
 }
 
-async function runCheckinSafely(reason) {
+function getCheckinStatusBody() {
+  return {
+    running: checkinRunning,
+    startedAt: checkinLastStartedAt,
+    finishedAt: checkinLastFinishedAt,
+    error: checkinLastError || null,
+  };
+}
+
+function getBalanceStatusBody() {
+  return {
+    running: balanceRunning,
+    startedAt: balanceLastStartedAt,
+    finishedAt: balanceLastFinishedAt,
+    error: balanceLastError || null,
+  };
+}
+
+function runCheckinSafely(reason) {
   if (checkinRunning) {
     console.log(`[service] skip checkin (${reason}), previous run still active`);
-    return;
+    return {
+      ok: true,
+      statusCode: 200,
+      body: {
+        ok: true,
+        started: false,
+        alreadyRunning: true,
+        ...getCheckinStatusBody(),
+      },
+    };
   }
 
   checkinRunning = true;
+  checkinLastStartedAt = new Date().toISOString();
+  checkinLastFinishedAt = null;
+  checkinLastError = "";
   console.log(`[service] start checkin (${reason})`);
-  try {
-    await runCheckin();
-    console.log("[service] checkin finished");
-  } catch (error) {
-    console.error("[service] checkin failed:", error);
-  } finally {
-    checkinRunning = false;
-  }
+  void runCheckin()
+    .then(() => {
+      console.log("[service] checkin finished");
+    })
+    .catch((error) => {
+      checkinLastError = error?.message || "Batch check-in failed";
+      console.error("[service] checkin failed:", error);
+    })
+    .finally(() => {
+      checkinRunning = false;
+      checkinLastFinishedAt = new Date().toISOString();
+    });
+
+  return {
+    ok: true,
+    statusCode: 202,
+    body: {
+      ok: true,
+      started: true,
+      alreadyRunning: false,
+      ...getCheckinStatusBody(),
+    },
+  };
 }
 
-async function runBalanceSafely(reason) {
+function runBalanceSafely(reason) {
   if (balanceRunning) {
-    console.log(`[service] skip balance refresh (${reason}), previous run still active`);
-    return;
+    console.log(`[service] skip status refresh (${reason}), previous run still active`);
+    return {
+      ok: true,
+      statusCode: 200,
+      body: {
+        ok: true,
+        started: false,
+        alreadyRunning: true,
+        ...getBalanceStatusBody(),
+      },
+    };
   }
 
   balanceRunning = true;
-  console.log(`[service] start balance refresh (${reason})`);
-  try {
+  balanceLastStartedAt = new Date().toISOString();
+  balanceLastFinishedAt = null;
+  balanceLastError = "";
+  console.log(`[service] start status refresh (${reason})`);
+  void (async () => {
     await runBalanceRefresh();
-    console.log("[service] balance refresh finished");
+    await runCheckinStatusRefresh();
+  })()
+    .then(() => {
+      console.log("[service] status refresh finished");
+    })
+    .catch((error) => {
+      balanceLastError = error?.message || "Status refresh failed";
+      console.error("[service] status refresh failed:", error);
+    })
+    .finally(() => {
+      balanceRunning = false;
+      balanceLastFinishedAt = new Date().toISOString();
+    });
+
+  return {
+    ok: true,
+    statusCode: 202,
+    body: {
+      ok: true,
+      started: true,
+      alreadyRunning: false,
+      ...getBalanceStatusBody(),
+    },
+  };
+}
+
+async function ensureCheckinForPendingAccounts(reason) {
+  try {
+    const store = await readStore(CONFIG.storePath);
+    const pendingAccounts = store.accounts.filter((account) => {
+      return !(account.checkinStatus && account.checkinStatus.checkedInToday === true);
+    });
+
+    if (!pendingAccounts.length) {
+      console.log(`[service] skip checkin monitor (${reason}), all accounts already checked in`);
+      return;
+    }
+
+    console.log(
+      `[service] checkin monitor (${reason}) found ${pendingAccounts.length} pending account(s), starting background checkin`,
+    );
+    runCheckinSafely(`monitor:${reason}`);
   } catch (error) {
-    console.error("[service] balance refresh failed:", error);
-  } finally {
-    balanceRunning = false;
+    console.error(`[service] checkin monitor failed (${reason}):`, error);
   }
 }
 
-async function runRegisterSafely(reason, count) {
+function getRegisterStatusBody() {
+  return {
+    running: registerRunning,
+    requestedCount: registerLastRequestedCount,
+    startedAt: registerLastStartedAt,
+    finishedAt: registerLastFinishedAt,
+    summary: registerLastSummary,
+    error: registerLastError || null,
+  };
+}
+
+function runRegisterSafely(reason, count) {
   if (registerRunning) {
     return {
-      ok: false,
-      statusCode: 409,
-      body: { error: "Batch register is already running" },
+      ok: true,
+      statusCode: 200,
+      body: {
+        ok: true,
+        started: false,
+        alreadyRunning: true,
+        ...getRegisterStatusBody(),
+      },
     };
   }
 
+  const resolvedCount = Math.max(1, Number.parseInt(String(count ?? "1"), 10) || 1);
   registerRunning = true;
-  console.log(`[service] start batch register (${reason}) count=${count}`);
-  try {
-    const summary = await runBatchRegister(count);
-    console.log("[service] batch register finished");
-    return { ok: true, statusCode: 200, body: { ok: true, summary } };
-  } catch (error) {
-    console.error("[service] batch register failed:", error);
-    return {
-      ok: false,
-      statusCode: 500,
-      body: { error: error?.message || "Batch register failed" },
-    };
-  } finally {
-    registerRunning = false;
-  }
+  registerLastRequestedCount = resolvedCount;
+  registerLastStartedAt = new Date().toISOString();
+  registerLastFinishedAt = null;
+  registerLastSummary = null;
+  registerLastError = "";
+
+  console.log(`[service] start batch register (${reason}) count=${resolvedCount}`);
+  void runBatchRegister(resolvedCount)
+    .then((summary) => {
+      registerLastSummary = summary;
+      console.log("[service] batch register finished");
+    })
+    .catch((error) => {
+      registerLastError = error?.message || "Batch register failed";
+      console.error("[service] batch register failed:", error);
+    })
+    .finally(() => {
+      registerRunning = false;
+      registerLastFinishedAt = new Date().toISOString();
+    });
+
+  return {
+    ok: true,
+    statusCode: 202,
+    body: {
+      ok: true,
+      started: true,
+      alreadyRunning: false,
+      ...getRegisterStatusBody(),
+    },
+  };
 }
 
 async function runUploadTokensSafely() {
@@ -493,6 +640,42 @@ async function handleRequest(req, res) {
     });
   }
 
+  if (req.method === "GET" && url.pathname === buildPath("/registers/status")) {
+    if (!requireAdminKey(req, res)) {
+      return;
+    }
+
+    return json(res, 200, {
+      ok: true,
+      ...getRegisterStatusBody(),
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === buildPath("/checkins/status")) {
+    if (!requireAdminKey(req, res)) {
+      return;
+    }
+
+    return json(res, 200, {
+      ok: true,
+      ...getCheckinStatusBody(),
+    });
+  }
+
+  if (
+    req.method === "GET" &&
+    (url.pathname === buildPath("/status") || url.pathname === buildPath("/balances/status"))
+  ) {
+    if (!requireAdminKey(req, res)) {
+      return;
+    }
+
+    return json(res, 200, {
+      ok: true,
+      ...getBalanceStatusBody(),
+    });
+  }
+
   if (req.method === "GET" && url.pathname === "/management.html") {
     if (!CONFIG.adminApiKey) {
       return html(res, 503, renderManagementLoginPage("ADMIN_API_KEY 尚未配置，管理页不可用。"));
@@ -586,7 +769,28 @@ async function handleRequest(req, res) {
       return json(res, 400, { error: "Invalid JSON body" });
     }
 
-    const result = await runRegisterSafely("api", body.count);
+    const result = runRegisterSafely("api", body.count);
+    return json(res, result.statusCode, result.body);
+  }
+
+  if (req.method === "POST" && url.pathname === buildPath("/checkins")) {
+    if (!requireAdminKey(req, res)) {
+      return;
+    }
+
+    const result = runCheckinSafely("api");
+    return json(res, result.statusCode, result.body);
+  }
+
+  if (
+    req.method === "POST" &&
+    (url.pathname === buildPath("/status/refresh") || url.pathname === buildPath("/balances/refresh"))
+  ) {
+    if (!requireAdminKey(req, res)) {
+      return;
+    }
+
+    const result = runBalanceSafely("api");
     return json(res, result.statusCode, result.body);
   }
 
@@ -692,6 +896,14 @@ async function main() {
   );
 
   cron.schedule(
+    CONFIG.checkinMonitorCronExpr,
+    () => {
+      void ensureCheckinForPendingAccounts("monitor");
+    },
+    { timezone: CONFIG.checkinCronTz },
+  );
+
+  cron.schedule(
     CONFIG.balanceCronExpr,
     () => {
       void runBalanceSafely("scheduled");
@@ -716,7 +928,7 @@ async function main() {
   server.listen(CONFIG.apiPort, API_HOST, () => {
     console.log(`[service] listening on http://${API_HOST}:${CONFIG.apiPort}${API_PREFIX}`);
     console.log(
-      `[service] checkin cron='${CONFIG.checkinCronExpr}' tz='${CONFIG.checkinCronTz}', balance cron='${CONFIG.balanceCronExpr}' tz='${CONFIG.balanceCronTz}'`,
+      `[service] checkin cron='${CONFIG.checkinCronExpr}' monitor='${CONFIG.checkinMonitorCronExpr}' tz='${CONFIG.checkinCronTz}', status cron='${CONFIG.balanceCronExpr}' tz='${CONFIG.balanceCronTz}'`,
     );
   });
 }

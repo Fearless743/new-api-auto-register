@@ -253,6 +253,46 @@ export async function refreshAccountCheckinStatus(username, month = currentMonth
   return result;
 }
 
+export async function runCheckinStatusRefresh(month = currentMonth()) {
+  await ensureStoreFile(CONFIG.storePath);
+  const store = await readStore(CONFIG.storePath);
+  const accounts = store.accounts.filter((account) => account.username);
+
+  if (accounts.length === 0) {
+    throw new Error("未找到可用账号，请先准备 store.json 中的 accounts");
+  }
+
+  let okCount = 0;
+  let failCount = 0;
+
+  for (let i = 0; i < accounts.length; i += 1) {
+    const account = accounts[i];
+
+    if (!account.password) {
+      console.log(`[${i + 1}/${accounts.length}] 跳过签到状态刷新：${account.username} 缺少密码`);
+      failCount += 1;
+      continue;
+    }
+
+    try {
+      await refreshAccountCheckinStatus(account.username, month);
+      okCount += 1;
+      console.log(`[${i + 1}/${accounts.length}] 签到状态刷新成功 ${account.username}`);
+    } catch (error) {
+      failCount += 1;
+      console.log(
+        `[${i + 1}/${accounts.length}] 签到状态刷新失败 ${account.username} ${error?.message || "unknown error"}`,
+      );
+    }
+
+    if (CONFIG.requestDelayMs > 0 && i < accounts.length - 1) {
+      await sleep(CONFIG.requestDelayMs);
+    }
+  }
+
+  console.log(`签到状态刷新完成：成功${okCount}，失败${failCount}`);
+}
+
 export async function manualCheckin(username) {
   const store = await readStore(CONFIG.storePath);
   const account = store.accounts.find((item) => item.username === username);
