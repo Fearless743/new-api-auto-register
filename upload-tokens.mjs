@@ -1,5 +1,4 @@
 import "./env-bootstrap.mjs";
-import { readFile } from "node:fs/promises";
 import { listUniqueTokens, readStore } from "./storage.mjs";
 
 const CONFIG = {

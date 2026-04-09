@@ -74,13 +74,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function saveAccountPatch(username, patch) {
-  await updateStore(CONFIG.storePath, (store) => {
-    upsertAccountInStore(store, { username, ...patch });
-    return store;
-  });
-}
-
 async function syncBaseUrlToStore() {
   await updateStore(CONFIG.storePath, (store) => setBaseUrlInStore(store, CONFIG.baseUrl));
 }
@@ -92,6 +85,13 @@ async function resolveBaseUrl() {
     CONFIG.baseUrl = storedBaseUrl;
   }
   return CONFIG.baseUrl;
+}
+
+async function saveAccountPatch(username, patch) {
+  await updateStore(CONFIG.storePath, (store) => {
+    upsertAccountInStore(store, { username, ...patch });
+    return store;
+  });
 }
 
 function workflowStateFromResult(result, fallbackMessage) {

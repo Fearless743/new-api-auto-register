@@ -33,6 +33,7 @@ function normalizeAccount(account = {}) {
     token: String(account.token || "").trim(),
     session: String(account.session || "").trim(),
     newApiUser: String(account.newApiUser || account.new_api_user || "").trim(),
+    baseUrl: String(account.baseUrl || account.base_url || "").trim(),
     createdAt: account.createdAt || null,
     updatedAt: account.updatedAt || null,
     lastLoginAt: account.lastLoginAt || null,
@@ -166,8 +167,6 @@ function normalizeStore(store = {}) {
     settings: normalizeSettings(store.settings),
   };
 }
-
-
 export async function ensureStoreFile(storePath) {
   await mkdir(dirname(storePath), { recursive: true });
   try {
@@ -265,4 +264,14 @@ export function setBaseUrlInStore(store, baseUrl) {
 
 export function getBaseUrlFromStore(store) {
   return String(store?.settings?.baseUrl || "").trim();
+}
+
+export function listUniqueTokens(store) {
+  return Array.from(
+    new Set(
+      store.accounts
+        .map((account) => String(account.token || "").trim())
+        .filter((token) => token.startsWith("sk-")),
+    ),
+  );
 }
