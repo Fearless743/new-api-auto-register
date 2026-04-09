@@ -79,9 +79,11 @@ function combineCookies(sessionCookie) {
 
 async function loginAndGetSession(username, password) {
   const headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+    "User-Agent":
+      "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
     Accept: "application/json, text/plain, */*",
-    "Accept-Language": "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
+    "Accept-Language":
+      "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
@@ -133,15 +135,21 @@ async function saveAccountPatch(username, patch) {
 async function fetchSelf(account) {
   const cookieHeader = combineCookies(account.session);
   const headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+    "User-Agent":
+      "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
     Accept: "application/json, text/plain, */*",
-    "Accept-Language": "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
+    "Accept-Language":
+      "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Cache-Control": "no-store",
     Connection: "keep-alive",
     Referer: `${CONFIG.baseUrl}/console/topup`,
-    ...((account.newApiUser || CONFIG.defaultNewApiUser)
-      ? { "New-API-User": String(account.newApiUser || CONFIG.defaultNewApiUser) }
+    ...(account.newApiUser || CONFIG.defaultNewApiUser
+      ? {
+          "New-API-User": String(
+            account.newApiUser || CONFIG.defaultNewApiUser,
+          ),
+        }
       : {}),
     ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
@@ -169,7 +177,9 @@ function quotaToUsd(quota) {
 export async function runBalanceRefresh() {
   await ensureStoreFile(CONFIG.storePath);
   const store = await readStore(CONFIG.storePath);
-  const accounts = store.accounts.filter((account) => account.username && account.password);
+  const accounts = store.accounts.filter(
+    (account) => account.username && account.password,
+  );
 
   if (accounts.length === 0) {
     throw new Error("未找到可用账号，请先准备 store.json 中的 accounts");
@@ -183,7 +193,10 @@ export async function runBalanceRefresh() {
     const acc = accounts[i];
 
     if (!acc.newApiUser && acc.password) {
-      const loginForUserId = await loginAndGetSession(acc.username, acc.password);
+      const loginForUserId = await loginAndGetSession(
+        acc.username,
+        acc.password,
+      );
       if (loginForUserId.ok && loginForUserId.newApiUser) {
         acc.newApiUser = loginForUserId.newApiUser;
         acc.session = loginForUserId.session || acc.session;
@@ -245,6 +258,10 @@ export async function runBalanceRefresh() {
           await sleep(CONFIG.requestDelayMs);
         }
         selfResult = await fetchSelf(acc);
+      } else {
+        console.warn(
+          `账号 ${acc.username} 在获取余额时遇到 401，尝试重新登录失败: HTTP ${relogin.status} - ${relogin.message}`,
+        );
       }
     }
 
@@ -279,6 +296,9 @@ export async function runBalanceRefresh() {
       });
       console.log(`${acc.username}: ${balance}`);
     } else {
+      console.warn(
+        `账号 ${acc.username} 获取余额失败，状态码: ${selfResult.status}`,
+      );
       totalUsedQuota += Number(acc.lastUsedQuota || 0);
       snapshotAccounts.push({
         username: acc.username,
