@@ -174,20 +174,24 @@ function quotaToUsd(quota) {
   return `$${usd.toFixed(2)}`;
 }
 
-export async function runBalanceRefresh() {
+export async function runBalanceRefresh(specificUsername = null) {
   await ensureStoreFile(CONFIG.storePath);
   const store = await readStore(CONFIG.storePath);
-  const accounts = store.accounts.filter(
+  let accounts = store.accounts.filter(
     (account) => account.username && account.password,
   );
+
+  if (specificUsername) {
+    accounts = accounts.filter((a) => a.username === specificUsername);
+  }
 
   if (accounts.length === 0) {
     throw new Error("未找到可用账号，请先准备 store.json 中的 accounts");
   }
 
-  let totalQuota = 0;
-  let totalUsedQuota = 0;
-  const snapshotAccounts = [];
+  let totalQuota = store.balanceSnapshot?.totalQuota || 0;
+  let totalUsedQuota = store.balanceSnapshot?.totalUsedQuota || 0;
+  const snapshotAccounts = store.balanceSnapshot?.accounts ? [...store.balanceSnapshot.accounts] : [];
 
   for (let i = 0; i < accounts.length; i += 1) {
     const acc = accounts[i];
@@ -224,6 +228,12 @@ export async function runBalanceRefresh() {
           lastLoginAt: new Date().toISOString(),
         });
       } else {
+        const existingIndex = snapshotAccounts.findIndex((sa) => sa.username === acc.username);
+        if (existingIndex !== -1) {
+          totalQuota -= snapshotAccounts[existingIndex].quota || 0;
+          totalUsedQuota -= snapshotAccounts[existingIndex].usedQuota || 0;
+          snapshotAccounts.splice(existingIndex, 1);
+        }
         snapshotAccounts.push({
           username: acc.username,
           quota: 0,
@@ -270,6 +280,14 @@ export async function runBalanceRefresh() {
       const usedQuota = selfResult.body?.data?.used_quota ?? 0;
       const balance = quotaToUsd(quota);
       const usedBalance = quotaToUsd(usedQuota);
+      
+      const existingIndex = snapshotAccounts.findIndex((sa) => sa.username === acc.username);
+      if (existingIndex !== -1) {
+        totalQuota -= snapshotAccounts[existingIndex].quota || 0;
+        totalUsedQuota -= snapshotAccounts[existingIndex].usedQuota || 0;
+        snapshotAccounts.splice(existingIndex, 1);
+      }
+
       totalQuota += Number(quota) || 0;
       totalUsedQuota += Number(usedQuota) || 0;
       const updatedAt = new Date().toISOString();
@@ -299,6 +317,12 @@ export async function runBalanceRefresh() {
       console.warn(
         `账号 ${acc.username} 获取余额失败，状态码: ${selfResult.status}`,
       );
+      const existingIndex = snapshotAccounts.findIndex((sa) => sa.username === acc.username);
+      if (existingIndex !== -1) {
+        totalQuota -= snapshotAccounts[existingIndex].quota || 0;
+        totalUsedQuota -= snapshotAccounts[existingIndex].usedQuota || 0;
+        snapshotAccounts.splice(existingIndex, 1);
+      }
       snapshotAccounts.push({
         username: acc.username,
         quota: 0,

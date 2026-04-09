@@ -83713,15 +83713,13 @@ var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 var { Header: Header3, Content: Content3 } = layout_default2;
 var { Title: Title3, Text: Text2, Paragraph: Paragraph3 } = typography_default;
 var apiBase = "/api";
-var workflowSteps = ["register", "login", "tokenCreate", "tokenList"];
+var workflowSteps = ["register", "tokenCreate", "tokenList"];
 function stepLabel(step) {
   return {
     register: "\u6CE8\u518C",
-    login: "\u767B\u5F55",
     tokenCreate: "\u521B\u5EFA Token",
     tokenList: "\u67E5\u8BE2 Token",
-    tokenRefresh: "\u91CD\u65B0\u83B7\u53D6 Token",
-    checkin: "\u7B7E\u5230"
+    tokenRefresh: "\u91CD\u65B0\u83B7\u53D6 Token"
   }[step] || step;
 }
 function statusClass(status) {
@@ -83743,15 +83741,6 @@ function workflowMessage(detail) {
     return detail.message || "\u6267\u884C\u5931\u8D25";
   }
   return "\u5F85\u6267\u884C";
-}
-function checkinTag(checkinStatus) {
-  if (checkinStatus && checkinStatus.checkedInToday === true) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "#00ff41", style: { color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }, children: "CHECKED IN" });
-  }
-  if (checkinStatus && checkinStatus.updatedAt) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "#ffb000", style: { color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }, children: "PENDING" });
-  }
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { style: { borderRadius: 0, background: "#222", color: "#888", border: "1px solid #333" }, children: "UNKNOWN" });
 }
 function formatTime(value) {
   if (!value) return "--";
@@ -83811,11 +83800,6 @@ async function requestRegisterStatus() {
     headers: adminHeaders()
   });
 }
-async function requestCheckinTaskStatus() {
-  return request(apiBase + "/checkins/status", {
-    headers: adminHeaders()
-  });
-}
 async function requestStatusRefreshTaskStatus() {
   return request(apiBase + "/status", {
     headers: adminHeaders()
@@ -83831,10 +83815,6 @@ function buildStats(summary, balanceSnapshot) {
     failed: allSummary.failed || 0,
     success: allSummary.success || 0,
     updated: allSummary.updated || null,
-    checkinDone: allSummary.checkinDone || 0,
-    checkinPending: allSummary.checkinPending || 0,
-    checkinUnknown: allSummary.checkinUnknown || 0,
-    filteredPending: summary && summary.filtered && summary.filtered.pendingCheckin || 0,
     balanceRemaining: balanceSnapshot && balanceSnapshot.totalBalance ? balanceSnapshot.totalBalance : quotaToUsd(remainingQuota),
     balanceUsed: balanceSnapshot && balanceSnapshot.totalUsedBalance ? balanceSnapshot.totalUsedBalance : quotaToUsd(usedQuota),
     balanceTotal: quotaToUsd(totalQuota),
@@ -83912,23 +83892,12 @@ function backgroundTaskAlertProps(task, options) {
     description: options.idleDescription
   };
 }
-function checkinStatusAlertProps(checkinTask) {
-  return backgroundTaskAlertProps(checkinTask, {
-    idleMessage: "\u6279\u91CF\u7B7E\u5230\u4EFB\u52A1\u51C6\u5907\u5C31\u7EEA",
-    idleDescription: "\u70B9\u51FB\u540E\u4F1A\u7ACB\u5373\u8FD4\u56DE\uFF0C\u7B7E\u5230\u4EFB\u52A1\u5728\u540E\u53F0\u5F02\u6B65\u6267\u884C\u3002",
-    runningMessage: "\u6279\u91CF\u7B7E\u5230\u4EFB\u52A1\u540E\u53F0\u8FD0\u884C\u4E2D",
-    runningDescription: "\u7BA1\u7406\u9875\u4F1A\u81EA\u52A8\u8F6E\u8BE2\u4EFB\u52A1\u72B6\u6001\uFF0C\u5E76\u5728\u5B8C\u6210\u540E\u5237\u65B0\u8D26\u53F7\u5217\u8868\u3002",
-    errorMessage: "\u6279\u91CF\u7B7E\u5230\u4EFB\u52A1\u6267\u884C\u5931\u8D25",
-    finishedMessage: "\u6279\u91CF\u7B7E\u5230\u4EFB\u52A1\u5DF2\u5B8C\u6210",
-    finishedDescription: "\u6700\u8FD1\u4E00\u6B21\u540E\u53F0\u7B7E\u5230\u4EFB\u52A1\u5DF2\u7ECF\u7ED3\u675F\u3002"
-  });
-}
 function balanceStatusAlertProps(balanceTask) {
   return backgroundTaskAlertProps(balanceTask, {
     idleMessage: "\u72B6\u6001\u5237\u65B0\u4EFB\u52A1\u51C6\u5907\u5C31\u7EEA",
     idleDescription: "\u70B9\u51FB\u540E\u4F1A\u7ACB\u5373\u8FD4\u56DE\uFF0C\u72B6\u6001\u5237\u65B0\u5728\u540E\u53F0\u5F02\u6B65\u6267\u884C\u3002",
     runningMessage: "\u72B6\u6001\u5237\u65B0\u4EFB\u52A1\u540E\u53F0\u8FD0\u884C\u4E2D",
-    runningDescription: "\u7BA1\u7406\u9875\u4F1A\u81EA\u52A8\u8F6E\u8BE2\u4EFB\u52A1\u72B6\u6001\uFF0C\u5E76\u5728\u5B8C\u6210\u540E\u5237\u65B0\u4F59\u989D\u3001\u7B7E\u5230\u72B6\u6001\u4E0E\u8D26\u53F7\u5217\u8868\u3002",
+    runningDescription: "\u7BA1\u7406\u9875\u4F1A\u81EA\u52A8\u8F6E\u8BE2\u4EFB\u52A1\u72B6\u6001\uFF0C\u5E76\u5728\u5B8C\u6210\u540E\u5237\u65B0\u4F59\u989D\u4E0E\u8D26\u53F7\u5217\u8868\u3002",
     errorMessage: "\u72B6\u6001\u5237\u65B0\u4EFB\u52A1\u6267\u884C\u5931\u8D25",
     finishedMessage: "\u72B6\u6001\u5237\u65B0\u4EFB\u52A1\u5DF2\u5B8C\u6210",
     finishedDescription: "\u6700\u8FD1\u4E00\u6B21\u540E\u53F0\u72B6\u6001\u5237\u65B0\u5DF2\u7ECF\u7ED3\u675F\u3002"
@@ -83937,7 +83906,6 @@ function balanceStatusAlertProps(balanceTask) {
 function AccountWorkflow({ account }) {
   const workflow = account.workflow || {};
   const hasToken = Boolean(account.token);
-  const checkinStatus = account.checkinStatus || {};
   const visibleSteps = getPendingWorkflowSteps(account);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 4, style: { width: "100%" }, children: [
     !hasToken && visibleSteps.map(function(step) {
@@ -83960,14 +83928,7 @@ function AccountWorkflow({ account }) {
         ] })
       ] }) }, step);
     }),
-    hasToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(alert_default, { type: "success", showIcon: false, message: "[SYS] TOKEN AQUIRED.", style: { background: "rgba(0, 255, 65, 0.1)", border: "1px solid #00ff41", color: "#00ff41", borderRadius: 0, fontFamily: "monospace", padding: "2px 8px" } }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 2, style: { width: "100%" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { style: { justifyContent: "space-between", width: "100%" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { strong: true, style: { color: "#fff", fontFamily: "monospace", fontSize: 12 }, children: "[CHECK-IN]" }),
-        checkinTag(checkinStatus)
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[MONTHLY_COUNT]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#fff", fontFamily: "monospace", fontSize: 12 }, children: checkinStatus.totalCheckins == null ? 0 : checkinStatus.totalCheckins }) }) })
-    ] }) })
+    hasToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(alert_default, { type: "success", showIcon: false, message: "[SYS] TOKEN AQUIRED.", style: { background: "rgba(0, 255, 65, 0.1)", border: "1px solid #00ff41", color: "#00ff41", borderRadius: 0, fontFamily: "monospace", padding: "2px 8px" } }) : null
   ] });
 }
 function CredentialsCell({ account }) {
@@ -84037,7 +83998,6 @@ function Dashboard() {
   const [accounts, setAccounts] = (0, import_react146.useState)([]);
   const [accountsSummary, setAccountsSummary] = (0, import_react146.useState)(null);
   const [balanceSnapshot, setBalanceSnapshot] = (0, import_react146.useState)(null);
-  const [checkinTask, setCheckinTask] = (0, import_react146.useState)(null);
   const [balanceTask, setBalanceTask] = (0, import_react146.useState)(null);
   const [registerTask, setRegisterTask] = (0, import_react146.useState)(null);
   const [selectedRowKeys, setSelectedRowKeys] = (0, import_react146.useState)([]);
@@ -84054,9 +84014,6 @@ function Dashboard() {
   const registerAlert = (0, import_react146.useMemo)(function() {
     return registerStatusAlertProps(registerTask);
   }, [registerTask]);
-  const checkinAlert = (0, import_react146.useMemo)(function() {
-    return checkinStatusAlertProps(checkinTask);
-  }, [checkinTask]);
   const balanceAlert = (0, import_react146.useMemo)(function() {
     return balanceStatusAlertProps(balanceTask);
   }, [balanceTask]);
@@ -84066,7 +84023,7 @@ function Dashboard() {
     });
   }, [accounts, selectedRowKeys]);
   const visibleFailedActions = (0, import_react146.useMemo)(function() {
-    if (filters.step === "checkin") return [];
+    if (filters.step === "tokenRefresh") return [];
     const actions = [];
     accounts.forEach(function(account) {
       workflowSteps.forEach(function(step) {
@@ -84083,16 +84040,6 @@ function Dashboard() {
       return selectedRowKeys.includes(item.username);
     });
   }, [visibleFailedActions, selectedRowKeys]);
-  const visibleNeedCheckin = (0, import_react146.useMemo)(function() {
-    return accounts.filter(function(account) {
-      return !(account.checkinStatus && account.checkinStatus.checkedInToday);
-    }).length;
-  }, [accounts]);
-  const selectedNeedCheckin = (0, import_react146.useMemo)(function() {
-    return selectedAccounts.filter(function(account) {
-      return !(account.checkinStatus && account.checkinStatus.checkedInToday);
-    }).length;
-  }, [selectedAccounts]);
   async function loadAccounts(silent, nextPage, nextPageSize, nextFilters) {
     const page = nextPage || pagination.current;
     const pageSize = 1e4;
@@ -84134,18 +84081,6 @@ function Dashboard() {
       return null;
     }
   }
-  async function loadCheckinTaskStatus(silent) {
-    try {
-      const data = await requestCheckinTaskStatus();
-      setCheckinTask(data || null);
-      return data || null;
-    } catch (error) {
-      if (!silent) {
-        message.error(error.message);
-      }
-      return null;
-    }
-  }
   async function loadBalanceTaskStatus(silent) {
     try {
       const data = await requestStatusRefreshTaskStatus();
@@ -84161,7 +84096,6 @@ function Dashboard() {
   (0, import_react146.useEffect)(function() {
     void loadAccounts();
     void loadRegisterStatus(true);
-    void loadCheckinTaskStatus(true);
     void loadBalanceTaskStatus(true);
   }, []);
   (0, import_react146.useEffect)(function() {
@@ -84179,21 +84113,6 @@ function Dashboard() {
       window.clearInterval(timer);
     };
   }, [registerTask && registerTask.running, pagination.pageSize, filters]);
-  (0, import_react146.useEffect)(function() {
-    if (!(checkinTask && checkinTask.running)) {
-      return void 0;
-    }
-    const timer = window.setInterval(function() {
-      void loadCheckinTaskStatus(true).then(function(data) {
-        if (data && !data.running) {
-          void loadAccounts(true, pagination.current, pagination.pageSize, filters);
-        }
-      });
-    }, 3e3);
-    return function() {
-      window.clearInterval(timer);
-    };
-  }, [checkinTask && checkinTask.running, pagination.current, pagination.pageSize, filters]);
   (0, import_react146.useEffect)(function() {
     if (!(balanceTask && balanceTask.running)) {
       return void 0;
@@ -84462,13 +84381,13 @@ function Dashboard() {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(layout_default2, { style: { minHeight: "100vh", background: "#f5f5f5" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Header3, { style: { background: "#fff", borderBottom: "1px solid #f0f0f0", padding: "0 24px" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 0, style: { height: "100%", justifyContent: "center" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Title3, { level: 4, style: { margin: 0 }, children: "\u8D26\u6237\u72B6\u6001\u9762\u677F" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { type: "secondary", children: "\u4F7F\u7528 Ant Design \u9ED8\u8BA4\u6837\u5F0F\u5C55\u793A\u6CE8\u518C\u3001\u767B\u5F55\u3001Token\u3001\u7B7E\u5230\u4E0E\u4F59\u989D\u72B6\u6001" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { type: "secondary", children: "\u4F7F\u7528 Ant Design \u9ED8\u8BA4\u6837\u5F0F\u5C55\u793A\u6CE8\u518C\u3001Token\u4E0E\u4F59\u989D\u72B6\u6001" })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Content3, { style: { padding: 24 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 16, style: { width: "100%" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(row_default2, { gutter: [16, 16], children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, lg: 12, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(card_default, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Title3, { level: 5, children: "\u63A7\u5236\u53F0" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Paragraph3, { type: "secondary", style: { marginBottom: 0 }, children: "\u67E5\u770B\u6BCF\u4E2A\u8D26\u53F7\u7684\u6D41\u7A0B\u72B6\u6001\u3001\u7B7E\u5230\u72B6\u6001\u3001\u51ED\u636E\u548C\u4F59\u989D\u3002\u5931\u8D25\u6B65\u9AA4\u53EF\u4EE5\u76F4\u63A5\u91CD\u8BD5\uFF0C\u5237\u65B0\u72B6\u6001\u4F1A\u540C\u6B65\u5237\u65B0\u7B7E\u5230\u4FE1\u606F\u3002" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Paragraph3, { type: "secondary", style: { marginBottom: 0 }, children: "\u67E5\u770B\u6BCF\u4E2A\u8D26\u53F7\u7684\u6D41\u7A0B\u72B6\u6001\u3001\u51ED\u636E\u548C\u4F59\u989D\u3002\u5931\u8D25\u6B65\u9AA4\u53EF\u4EE5\u76F4\u63A5\u91CD\u8BD5\u3002" })
         ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, lg: 12, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(row_default2, { gutter: [16, 16], children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { span: 12, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(statistic_default2, { title: "\u8D26\u53F7\u603B\u6570", value: stats.total }) }) }),
@@ -84478,10 +84397,6 @@ function Dashboard() {
         ] }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(row_default2, { gutter: [16, 16], children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, md: 12, xl: 6, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(statistic_default2, { title: "\u4ECA\u65E5\u5DF2\u7B7E\u5230", value: stats.checkinDone }) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, md: 12, xl: 6, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(statistic_default2, { title: "\u4ECA\u65E5\u672A\u7B7E\u5230", value: stats.checkinPending }) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, md: 12, xl: 6, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(statistic_default2, { title: "\u7B7E\u5230\u72B6\u6001\u672A\u77E5", value: stats.checkinUnknown }) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, md: 12, xl: 6, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(statistic_default2, { title: "\u5F53\u524D\u7B5B\u9009\u672A\u7B7E\u5230", value: stats.filteredPending }) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, md: 8, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(statistic_default2, { title: "\u5F53\u524D\u603B\u4F59\u989D", value: stats.balanceRemaining }) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, md: 8, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(statistic_default2, { title: "\u603B\u4F7F\u7528\u4F59\u989D", value: stats.balanceUsed }) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, md: 8, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(statistic_default2, { title: "\u603B\u4F59\u989D", value: stats.balanceTotal }) }) }),
@@ -84503,15 +84418,6 @@ function Dashboard() {
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "\u8FD0\u884C\u72B6\u6001", children: registerTask && registerTask.running ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "processing", children: "\u8FD0\u884C\u4E2D" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "default", children: "\u7A7A\u95F2" }) }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "\u5F00\u59CB\u65F6\u95F4", children: formatTime(registerTask && registerTask.startedAt) }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "\u7ED3\u675F\u65F6\u95F4", children: formatTime(registerTask && registerTask.finishedAt) })
-            ] })
-          ] }) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, xl: 8, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 12, style: { width: "100%" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(alert_default, { type: checkinAlert.type, message: checkinAlert.message, description: checkinAlert.description, showIcon: true }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(descriptions_default, { column: 2, size: "small", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "\u4EFB\u52A1\u7C7B\u578B", children: "\u6279\u91CF\u7B7E\u5230" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "\u8FD0\u884C\u72B6\u6001", children: checkinTask && checkinTask.running ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "processing", children: "\u8FD0\u884C\u4E2D" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "default", children: "\u7A7A\u95F2" }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "\u5F00\u59CB\u65F6\u95F4", children: formatTime(checkinTask && checkinTask.startedAt) }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "\u7ED3\u675F\u65F6\u95F4", children: formatTime(checkinTask && checkinTask.finishedAt) })
             ] })
           ] }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, xl: 8, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 12, style: { width: "100%" }, children: [
@@ -84545,8 +84451,7 @@ function Dashboard() {
                 { value: "all", label: "\u5168\u90E8\u72B6\u6001" },
                 { value: "failed-only", label: "\u4EC5\u770B\u5931\u8D25" },
                 { value: "success-only", label: "\u4EC5\u770B\u5168\u6210\u529F" },
-                { value: "idle-only", label: "\u4EC5\u770B\u672A\u6267\u884C" },
-                { value: "unchecked-only", label: "\u4EC5\u770B\u672A\u7B7E\u5230" }
+                { value: "idle-only", label: "\u4EC5\u770B\u672A\u6267\u884C" }
               ],
               onChange: function(value) {
                 setFilters(Object.assign({}, filters, { statusMode: value }));
@@ -84561,11 +84466,9 @@ function Dashboard() {
               options: [
                 { value: "all", label: "\u5168\u90E8\u6B65\u9AA4" },
                 { value: "register", label: "\u6CE8\u518C" },
-                { value: "login", label: "\u767B\u5F55" },
                 { value: "tokenCreate", label: "\u521B\u5EFA Token" },
                 { value: "tokenList", label: "\u67E5\u8BE2 Token" },
-                { value: "tokenRefresh", label: "\u91CD\u65B0\u83B7\u53D6 Token" },
-                { value: "checkin", label: "\u7B7E\u5230" }
+                { value: "tokenRefresh", label: "\u91CD\u65B0\u83B7\u53D6 Token" }
               ],
               onChange: function(value) {
                 setFilters(Object.assign({}, filters, { step: value }));

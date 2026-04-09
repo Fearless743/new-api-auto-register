@@ -29,16 +29,14 @@ const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 
 const apiBase = "/api";
-const workflowSteps = ["register", "login", "tokenCreate", "tokenList"];
+const workflowSteps = ["register", "tokenCreate", "tokenList"];
 
 function stepLabel(step) {
   return {
     register: "注册",
-    login: "登录",
     tokenCreate: "创建 Token",
     tokenList: "查询 Token",
     tokenRefresh: "重新获取 Token",
-    checkin: "签到",
   }[step] || step;
 }
 
@@ -65,15 +63,6 @@ function workflowMessage(detail) {
   return "待执行";
 }
 
-function checkinTag(checkinStatus) {
-  if (checkinStatus && checkinStatus.checkedInToday === true) {
-    return <Tag color="#00ff41" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }}>CHECKED IN</Tag>;
-  }
-  if (checkinStatus && checkinStatus.updatedAt) {
-    return <Tag color="#ffb000" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }}>PENDING</Tag>;
-  }
-  return <Tag style={{ borderRadius: 0, background: "#222", color: "#888", border: "1px solid #333" }}>UNKNOWN</Tag>;
-}
 
 function formatTime(value) {
   if (!value) return "--";
@@ -122,13 +111,6 @@ async function request(path, options) {
   return data;
 }
 
-async function requestCheckinStatus(username) {
-  return request(apiBase + "/accounts/" + encodeURIComponent(username) + "/checkin-status", {
-    method: "POST",
-    headers: Object.assign({ "Content-Type": "application/json" }, adminHeaders()),
-    body: JSON.stringify({}),
-  });
-}
 
 async function requestExportTokens() {
   const res = await fetch(apiBase + "/tokens/export", {
@@ -151,11 +133,6 @@ async function requestRegisterStatus() {
   });
 }
 
-async function requestCheckinTaskStatus() {
-  return request(apiBase + "/checkins/status", {
-    headers: adminHeaders(),
-  });
-}
 
 async function requestStatusRefreshTaskStatus() {
   return request(apiBase + "/status", {
@@ -174,10 +151,6 @@ function buildStats(summary, balanceSnapshot) {
     failed: allSummary.failed || 0,
     success: allSummary.success || 0,
     updated: allSummary.updated || null,
-    checkinDone: allSummary.checkinDone || 0,
-    checkinPending: allSummary.checkinPending || 0,
-    checkinUnknown: allSummary.checkinUnknown || 0,
-    filteredPending: (summary && summary.filtered && summary.filtered.pendingCheckin) || 0,
     balanceRemaining: balanceSnapshot && balanceSnapshot.totalBalance ? balanceSnapshot.totalBalance : quotaToUsd(remainingQuota),
     balanceUsed: balanceSnapshot && balanceSnapshot.totalUsedBalance ? balanceSnapshot.totalUsedBalance : quotaToUsd(usedQuota),
     balanceTotal: quotaToUsd(totalQuota),
@@ -266,24 +239,13 @@ function backgroundTaskAlertProps(task, options) {
   };
 }
 
-function checkinStatusAlertProps(checkinTask) {
-  return backgroundTaskAlertProps(checkinTask, {
-    idleMessage: "批量签到任务准备就绪",
-    idleDescription: "点击后会立即返回，签到任务在后台异步执行。",
-    runningMessage: "批量签到任务后台运行中",
-    runningDescription: "管理页会自动轮询任务状态，并在完成后刷新账号列表。",
-    errorMessage: "批量签到任务执行失败",
-    finishedMessage: "批量签到任务已完成",
-    finishedDescription: "最近一次后台签到任务已经结束。",
-  });
-}
 
 function balanceStatusAlertProps(balanceTask) {
   return backgroundTaskAlertProps(balanceTask, {
     idleMessage: "状态刷新任务准备就绪",
     idleDescription: "点击后会立即返回，状态刷新在后台异步执行。",
     runningMessage: "状态刷新任务后台运行中",
-    runningDescription: "管理页会自动轮询任务状态，并在完成后刷新余额、签到状态与账号列表。",
+    runningDescription: "管理页会自动轮询任务状态，并在完成后刷新余额与账号列表。",
     errorMessage: "状态刷新任务执行失败",
     finishedMessage: "状态刷新任务已完成",
     finishedDescription: "最近一次后台状态刷新已经结束。",
@@ -293,7 +255,6 @@ function balanceStatusAlertProps(balanceTask) {
 function AccountWorkflow({ account }) {
   const workflow = account.workflow || {};
   const hasToken = Boolean(account.token);
-  const checkinStatus = account.checkinStatus || {};
   const visibleSteps = getPendingWorkflowSteps(account);
 
   return (
@@ -318,18 +279,6 @@ function AccountWorkflow({ account }) {
       })}
 
       {hasToken ? <Alert type="success" showIcon={false} message="[SYS] TOKEN AQUIRED." style={{ background: "rgba(0, 255, 65, 0.1)", border: "1px solid #00ff41", color: "#00ff41", borderRadius: 0, fontFamily: "monospace", padding: "2px 8px" }} /> : null}
-
-      <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }} bodyStyle={{ padding: 4 }}>
-        <Space direction="vertical" size={2} style={{ width: "100%" }}>
-          <Space style={{ justifyContent: "space-between", width: "100%" }}>
-            <Text strong style={{ color: "#fff", fontFamily: "monospace", fontSize: 12 }}>[CHECK-IN]</Text>
-            {checkinTag(checkinStatus)}
-          </Space>
-          <Descriptions column={1} size="small" colon={false} labelStyle={{ color: "#666", fontFamily: "monospace" }}>
-            <Descriptions.Item label="[MONTHLY_COUNT]"><span style={{ color: "#fff", fontFamily: "monospace", fontSize: 12 }}>{checkinStatus.totalCheckins == null ? 0 : checkinStatus.totalCheckins}</span></Descriptions.Item>
-          </Descriptions>
-        </Space>
-      </Card>
     </Space>
   );
 }
@@ -478,7 +427,7 @@ function Dashboard() {
   const [accounts, setAccounts] = useState([]);
   const [accountsSummary, setAccountsSummary] = useState(null);
   const [balanceSnapshot, setBalanceSnapshot] = useState(null);
-  const [checkinTask, setCheckinTask] = useState(null);
+
   const [balanceTask, setBalanceTask] = useState(null);
   const [registerTask, setRegisterTask] = useState(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
@@ -498,9 +447,6 @@ function Dashboard() {
     return registerStatusAlertProps(registerTask);
   }, [registerTask]);
 
-  const checkinAlert = useMemo(function () {
-    return checkinStatusAlertProps(checkinTask);
-  }, [checkinTask]);
 
   const balanceAlert = useMemo(function () {
     return balanceStatusAlertProps(balanceTask);
@@ -513,7 +459,7 @@ function Dashboard() {
   }, [accounts, selectedRowKeys]);
 
   const visibleFailedActions = useMemo(function () {
-    if (filters.step === "checkin") return [];
+    if (filters.step === "tokenRefresh") return [];
     const actions = [];
 
     accounts.forEach(function (account) {
@@ -534,17 +480,6 @@ function Dashboard() {
     });
   }, [visibleFailedActions, selectedRowKeys]);
 
-  const visibleNeedCheckin = useMemo(function () {
-    return accounts.filter(function (account) {
-      return !(account.checkinStatus && account.checkinStatus.checkedInToday);
-    }).length;
-  }, [accounts]);
-
-  const selectedNeedCheckin = useMemo(function () {
-    return selectedAccounts.filter(function (account) {
-      return !(account.checkinStatus && account.checkinStatus.checkedInToday);
-    }).length;
-  }, [selectedAccounts]);
 
   async function loadAccounts(silent, nextPage, nextPageSize, nextFilters) {
     const page = nextPage || pagination.current;
@@ -590,18 +525,6 @@ function Dashboard() {
     }
   }
 
-  async function loadCheckinTaskStatus(silent) {
-    try {
-      const data = await requestCheckinTaskStatus();
-      setCheckinTask(data || null);
-      return data || null;
-    } catch (error) {
-      if (!silent) {
-        message.error(error.message);
-      }
-      return null;
-    }
-  }
 
   async function loadBalanceTaskStatus(silent) {
     try {
@@ -619,7 +542,7 @@ function Dashboard() {
   useEffect(function () {
     void loadAccounts();
     void loadRegisterStatus(true);
-    void loadCheckinTaskStatus(true);
+
     void loadBalanceTaskStatus(true);
   }, []);
 
@@ -641,23 +564,6 @@ function Dashboard() {
     };
   }, [registerTask && registerTask.running, pagination.pageSize, filters]);
 
-  useEffect(function () {
-    if (!(checkinTask && checkinTask.running)) {
-      return undefined;
-    }
-
-    const timer = window.setInterval(function () {
-      void loadCheckinTaskStatus(true).then(function (data) {
-        if (data && !data.running) {
-          void loadAccounts(true, pagination.current, pagination.pageSize, filters);
-        }
-      });
-    }, 3000);
-
-    return function () {
-      window.clearInterval(timer);
-    };
-  }, [checkinTask && checkinTask.running, pagination.current, pagination.pageSize, filters]);
 
   useEffect(function () {
     if (!(balanceTask && balanceTask.running)) {
@@ -955,7 +861,7 @@ function Dashboard() {
       <Header style={{ background: "#fff", borderBottom: "1px solid #f0f0f0", padding: "0 24px" }}>
         <Space direction="vertical" size={0} style={{ height: "100%", justifyContent: "center" }}>
           <Title level={4} style={{ margin: 0 }}>账户状态面板</Title>
-          <Text type="secondary">使用 Ant Design 默认样式展示注册、登录、Token、签到与余额状态</Text>
+          <Text type="secondary">使用 Ant Design 默认样式展示注册、Token与余额状态</Text>
         </Space>
       </Header>
       <Content style={{ padding: 24 }}>
@@ -965,7 +871,7 @@ function Dashboard() {
               <Card>
                 <Title level={5}>控制台</Title>
                 <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                  查看每个账号的流程状态、签到状态、凭据和余额。失败步骤可以直接重试，刷新状态会同步刷新签到信息。
+                  查看每个账号的流程状态、凭据和余额。失败步骤可以直接重试。
                 </Paragraph>
               </Card>
             </Col>
@@ -980,10 +886,6 @@ function Dashboard() {
           </Row>
 
           <Row gutter={[16, 16]}>
-            <Col xs={24} md={12} xl={6}><Card><Statistic title="今日已签到" value={stats.checkinDone} /></Card></Col>
-            <Col xs={24} md={12} xl={6}><Card><Statistic title="今日未签到" value={stats.checkinPending} /></Card></Col>
-            <Col xs={24} md={12} xl={6}><Card><Statistic title="签到状态未知" value={stats.checkinUnknown} /></Card></Col>
-            <Col xs={24} md={12} xl={6}><Card><Statistic title="当前筛选未签到" value={stats.filteredPending} /></Card></Col>
             <Col xs={24} md={8}><Card><Statistic title="当前总余额" value={stats.balanceRemaining} /></Card></Col>
             <Col xs={24} md={8}><Card><Statistic title="总使用余额" value={stats.balanceUsed} /></Card></Col>
             <Col xs={24} md={8}><Card><Statistic title="总余额" value={stats.balanceTotal} /></Card></Col>
@@ -1014,21 +916,7 @@ function Dashboard() {
                     </Space>
                   </Card>
                 </Col>
-                <Col xs={24} xl={8}>
-                  <Card size="small">
-                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                      <Alert type={checkinAlert.type} message={checkinAlert.message} description={checkinAlert.description} showIcon />
-                      <Descriptions column={2} size="small">
-                        <Descriptions.Item label="任务类型">批量签到</Descriptions.Item>
-                        <Descriptions.Item label="运行状态">
-                          {checkinTask && checkinTask.running ? <Tag color="processing">运行中</Tag> : <Tag color="default">空闲</Tag>}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="开始时间">{formatTime(checkinTask && checkinTask.startedAt)}</Descriptions.Item>
-                        <Descriptions.Item label="结束时间">{formatTime(checkinTask && checkinTask.finishedAt)}</Descriptions.Item>
-                      </Descriptions>
-                    </Space>
-                  </Card>
-                </Col>
+
                 <Col xs={24} xl={8}>
                   <Card size="small">
                     <Space direction="vertical" size={12} style={{ width: "100%" }}>
@@ -1063,7 +951,6 @@ function Dashboard() {
                     { value: "failed-only", label: "仅看失败" },
                     { value: "success-only", label: "仅看全成功" },
                     { value: "idle-only", label: "仅看未执行" },
-                    { value: "unchecked-only", label: "仅看未签到" },
                   ]}
                   onChange={function (value) {
                     setFilters(Object.assign({}, filters, { statusMode: value }));
@@ -1075,11 +962,9 @@ function Dashboard() {
                   options={[
                     { value: "all", label: "全部步骤" },
                     { value: "register", label: "注册" },
-                    { value: "login", label: "登录" },
                     { value: "tokenCreate", label: "创建 Token" },
                     { value: "tokenList", label: "查询 Token" },
                     { value: "tokenRefresh", label: "重新获取 Token" },
-                    { value: "checkin", label: "签到" },
                   ]}
                   onChange={function (value) {
                     setFilters(Object.assign({}, filters, { step: value }));
