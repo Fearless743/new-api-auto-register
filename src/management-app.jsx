@@ -92,6 +92,9 @@ function quotaToUsd(quota) {
 function getPendingWorkflowSteps(account) {
   const workflow = account.workflow || {};
   const firstIncompleteIndex = workflowSteps.findIndex(function (step) {
+    if (step === "tokenRefresh" && account.token && account.token.includes("***")) {
+        return true;
+    }
     return !workflow[step] || workflow[step].status !== "success";
   });
 
@@ -381,13 +384,16 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDel
   const workflow = account.workflow || {};
   const hasToken = Boolean(account.token);
   const actionableSteps = getPendingWorkflowSteps(account).filter(function (step) {
+    if (step === "tokenRefresh" && account.token && account.token.includes("***")) {
+        return true;
+    }
     return !workflow[step] || workflow[step].status !== "success";
   });
 
   return (
     <Card size="small" bordered={false} style={{ background: "transparent", border: "none" }} bodyStyle={{ padding: 4 }}>
       <Space direction="vertical" size={8} style={{ width: "100%" }}>
-        {!hasToken ? (
+        {!hasToken || (hasToken && account.token.includes("***")) ? (
           <Space wrap>
             {actionableSteps.length ? actionableSteps.map(function (step) {
               const detail = workflow[step] || {};

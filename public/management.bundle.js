@@ -83768,6 +83768,9 @@ function quotaToUsd(quota) {
 function getPendingWorkflowSteps(account) {
   const workflow = account.workflow || {};
   const firstIncompleteIndex = workflowSteps.findIndex(function(step) {
+    if (step === "tokenRefresh" && account.token && account.token.includes("***")) {
+      return true;
+    }
     return !workflow[step] || workflow[step].status !== "success";
   });
   if (firstIncompleteIndex === -1) {
@@ -83999,10 +84002,13 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDel
   const workflow = account.workflow || {};
   const hasToken = Boolean(account.token);
   const actionableSteps = getPendingWorkflowSteps(account).filter(function(step) {
+    if (step === "tokenRefresh" && account.token && account.token.includes("***")) {
+      return true;
+    }
     return !workflow[step] || workflow[step].status !== "success";
   });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "transparent", border: "none" }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 8, style: { width: "100%" }, children: [
-    !hasToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(space_default, { wrap: true, children: actionableSteps.length ? actionableSteps.map(function(step) {
+    !hasToken || hasToken && account.token.includes("***") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(space_default, { wrap: true, children: actionableSteps.length ? actionableSteps.map(function(step) {
       const detail = workflow[step] || {};
       const isFailed = detail.status === "failed";
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(button_default, { size: "small", style: { borderRadius: 0, fontFamily: "monospace", textTransform: "uppercase", background: isFailed ? "rgba(255, 0, 60, 0.1)" : "rgba(255, 255, 255, 0.1)", borderColor: isFailed ? "#ff003c" : "#333", color: isFailed ? "#ff003c" : "#fff", fontSize: 10, padding: "0 4px" }, onClick: function() {

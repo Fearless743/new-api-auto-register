@@ -92,9 +92,11 @@ async function saveAccountPatch(username, patch) {
 
 async function loginAndGetSession(username, password) {
   const headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+    "User-Agent":
+      "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
     Accept: "application/json, text/plain, */*",
-    "Accept-Language": "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
+    "Accept-Language":
+      "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
@@ -140,16 +142,22 @@ async function loginAndGetSession(username, password) {
 async function checkinOnce(account) {
   const cookieHeader = combineCookies(account.session);
   const headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+    "User-Agent":
+      "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
     Accept: "application/json, text/plain, */*",
-    "Accept-Language": "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
+    "Accept-Language":
+      "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Cache-Control": "no-store",
     Origin: CONFIG.baseUrl,
     Referer: `${CONFIG.baseUrl}/console/personal`,
     Connection: "keep-alive",
-    ...((account.newApiUser || CONFIG.defaultNewApiUser)
-      ? { "New-API-User": String(account.newApiUser || CONFIG.defaultNewApiUser) }
+    ...(account.newApiUser || CONFIG.defaultNewApiUser
+      ? {
+          "New-API-User": String(
+            account.newApiUser || CONFIG.defaultNewApiUser,
+          ),
+        }
       : {}),
     ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
@@ -173,16 +181,22 @@ export async function queryCheckinStatus(account, month = currentMonth()) {
   const cookieHeader = combineCookies(account.session);
   const url = `${CHECKIN_URL}?month=${encodeURIComponent(month)}`;
   const headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+    "User-Agent":
+      "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
     Accept: "application/json, text/plain, */*",
-    "Accept-Language": "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
+    "Accept-Language":
+      "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Cache-Control": "no-store",
     Origin: CONFIG.baseUrl,
     Referer: `${CONFIG.baseUrl}/console/personal`,
     Connection: "keep-alive",
-    ...((account.newApiUser || CONFIG.defaultNewApiUser)
-      ? { "New-API-User": String(account.newApiUser || CONFIG.defaultNewApiUser) }
+    ...(account.newApiUser || CONFIG.defaultNewApiUser
+      ? {
+          "New-API-User": String(
+            account.newApiUser || CONFIG.defaultNewApiUser,
+          ),
+        }
       : {}),
     ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
@@ -217,7 +231,10 @@ export async function queryCheckinStatus(account, month = currentMonth()) {
   };
 }
 
-export async function refreshAccountCheckinStatus(username, month = currentMonth()) {
+export async function refreshAccountCheckinStatus(
+  username,
+  month = currentMonth(),
+) {
   const store = await readStore(CONFIG.storePath);
   const account = store.accounts.find((item) => item.username === username);
   if (!account) {
@@ -229,7 +246,10 @@ export async function refreshAccountCheckinStatus(username, month = currentMonth
   }
 
   if (!account.session) {
-    const loginResult = await loginAndGetSession(account.username, account.password);
+    const loginResult = await loginAndGetSession(
+      account.username,
+      account.password,
+    );
     if (!loginResult.ok) {
       throw new Error(`Login failed: ${loginResult.message}`);
     }
@@ -269,15 +289,20 @@ export async function runCheckinStatusRefresh(month = currentMonth()) {
     const account = accounts[i];
 
     if (!account.password) {
-      console.log(`[${i + 1}/${accounts.length}] 跳过签到状态刷新：${account.username} 缺少密码`);
+      console.log(
+        `[${i + 1}/${accounts.length}] 跳过签到状态刷新：${account.username} 缺少密码`,
+      );
       failCount += 1;
       continue;
     }
 
     try {
-      await refreshAccountCheckinStatus(account.username, month);
+      const result = await refreshAccountCheckinStatus(account.username, month);
+      console.log(result);
       okCount += 1;
-      console.log(`[${i + 1}/${accounts.length}] 签到状态刷新成功 ${account.username}`);
+      console.log(
+        `[${i + 1}/${accounts.length}] 签到状态刷新成功 ${account.username}`,
+      );
     } catch (error) {
       failCount += 1;
       console.log(
@@ -305,7 +330,10 @@ export async function manualCheckin(username) {
   }
 
   if (!account.session) {
-    const loginResult = await loginAndGetSession(account.username, account.password);
+    const loginResult = await loginAndGetSession(
+      account.username,
+      account.password,
+    );
     if (!loginResult.ok) {
       throw new Error(`Login failed: ${loginResult.message}`);
     }
@@ -346,7 +374,9 @@ export async function manualCheckin(username) {
         checkinCount: 1,
         totalCheckins: 1,
         totalQuota: Number(quotaAwarded || 0),
-        records: checkinDate ? [{ checkinDate, quotaAwarded: Number(quotaAwarded || 0) }] : [],
+        records: checkinDate
+          ? [{ checkinDate, quotaAwarded: Number(quotaAwarded || 0) }]
+          : [],
         updatedAt: now,
       },
     });
@@ -381,19 +411,22 @@ async function checkinWithRetry(account, index, total) {
     }
 
     if (result.status === 401) {
-        const relogin = await loginAndGetSession(account.username, account.password);
-        if (relogin.ok) {
-          account.session = relogin.session;
-          account.newApiUser = relogin.newApiUser || account.newApiUser;
-          await saveAccountPatch(account.username, {
-            password: account.password,
-            newApiUser: account.newApiUser,
-            session: account.session,
-            lastLoginAt: new Date().toISOString(),
-          });
-          if (CONFIG.requestDelayMs > 0) {
-            await sleep(CONFIG.requestDelayMs);
-          }
+      const relogin = await loginAndGetSession(
+        account.username,
+        account.password,
+      );
+      if (relogin.ok) {
+        account.session = relogin.session;
+        account.newApiUser = relogin.newApiUser || account.newApiUser;
+        await saveAccountPatch(account.username, {
+          password: account.password,
+          newApiUser: account.newApiUser,
+          session: account.session,
+          lastLoginAt: new Date().toISOString(),
+        });
+        if (CONFIG.requestDelayMs > 0) {
+          await sleep(CONFIG.requestDelayMs);
+        }
         continue;
       }
       return {
@@ -443,7 +476,9 @@ export async function runCheckin() {
     const acc = accounts[i];
 
     if (!acc.password) {
-      console.log(`[${i + 1}/${accounts.length}] 跳过：${acc.username} 缺少密码`);
+      console.log(
+        `[${i + 1}/${accounts.length}] 跳过：${acc.username} 缺少密码`,
+      );
       failCount += 1;
       continue;
     }
