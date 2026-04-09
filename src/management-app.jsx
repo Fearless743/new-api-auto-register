@@ -19,6 +19,7 @@ import {
   Spin,
   Statistic,
   Table,
+  Popconfirm,
   Tag,
   Typography,
   theme,
@@ -371,7 +372,7 @@ function AccountCell({ account }) {
   );
 }
 
-function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, rowBusy }) {
+function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDelete, rowBusy }) {
   const workflow = account.workflow || {};
   const hasToken = Boolean(account.token);
   const actionableSteps = getPendingWorkflowSteps(account).filter(function (step) {
@@ -405,6 +406,11 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, rowBu
               执行签到
             </Button>
           )}
+          <Popconfirm title="确定要删除此账号吗？" onConfirm={function() { onDelete(account.username); }} okText="确定" cancelText="取消">
+            <Button size="small" danger loading={rowBusy === account.username + ":delete"}>
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       </Space>
     </Card>
@@ -676,6 +682,23 @@ function Dashboard() {
     }
   }
 
+  async function handleDelete(username) {
+    const key = username + ":delete";
+    setBusyKey(key);
+    try {
+      await request(apiBase + "/accounts/" + encodeURIComponent(username), {
+        method: "DELETE",
+        headers: adminHeaders(),
+      });
+      message.success(username + " 已删除");
+      await loadAccounts(true, pagination.current, pagination.pageSize, filters);
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setBusyKey("");
+    }
+  }
+
   async function refreshCheckinStatuses(accounts, options) {
     if (!accounts.length) {
       message.info("当前筛选结果里没有账号可刷新签到状态");
@@ -859,6 +882,7 @@ function Dashboard() {
             onRetry={handleRetry}
             onRefreshCheckin={handleRefreshCheckin}
             onManualCheckin={handleManualCheckin}
+            onDelete={handleDelete}
             rowBusy={busyKey}
           />
         );
