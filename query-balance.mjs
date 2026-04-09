@@ -260,7 +260,7 @@ export async function runBalanceRefresh() {
         selfResult = await fetchSelf(acc);
       } else {
         console.warn(
-          `账号 ${acc.username} 在获取余额时遇到 401，尝试重新登录失败: HTTP ${relogin.status} - ${relogin.message}`,
+          `账号 ${acc.username} 在获取余额时遇到 401，尝试重新登录失败`,
         );
       }
     }

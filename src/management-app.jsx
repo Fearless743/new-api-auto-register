@@ -49,9 +49,9 @@ function statusClass(status) {
 
 function statusTag(status) {
   const normalized = statusClass(status);
-  if (normalized === "success") return <Tag color="success">成功</Tag>;
-  if (normalized === "failed") return <Tag color="error">失败</Tag>;
-  return <Tag>未执行</Tag>;
+  if (normalized === "success") return <Tag color="#00ff41" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }}>SUCCESS</Tag>;
+  if (normalized === "failed") return <Tag color="#ff003c" style={{ color: "#fff", border: "none", fontWeight: "bold", borderRadius: 0 }}>FAILED</Tag>;
+  return <Tag style={{ borderRadius: 0, background: "#222", color: "#888", border: "1px solid #333" }}>IDLE</Tag>;
 }
 
 function workflowMessage(detail) {
@@ -66,12 +66,12 @@ function workflowMessage(detail) {
 
 function checkinTag(checkinStatus) {
   if (checkinStatus && checkinStatus.checkedInToday === true) {
-    return <Tag color="success">已签到</Tag>;
+    return <Tag color="#00ff41" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }}>CHECKED IN</Tag>;
   }
   if (checkinStatus && checkinStatus.updatedAt) {
-    return <Tag color="warning">未签到</Tag>;
+    return <Tag color="#ffb000" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }}>PENDING</Tag>;
   }
-  return <Tag>未知</Tag>;
+  return <Tag style={{ borderRadius: 0, background: "#222", color: "#888", border: "1px solid #333" }}>UNKNOWN</Tag>;
 }
 
 function formatTime(value) {
@@ -289,32 +289,32 @@ function AccountWorkflow({ account }) {
       {!hasToken && visibleSteps.map(function (step) {
         const detail = workflow[step] || {};
         return (
-          <Card key={step} size="small">
+          <Card key={step} size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }}>
             <Space direction="vertical" size={6} style={{ width: "100%" }}>
               <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                <Text strong>{stepLabel(step)}</Text>
+                <Text strong style={{ color: "#fff", fontFamily: "monospace", textTransform: "uppercase" }}>{stepLabel(step)}</Text>
                 {statusTag(detail.status)}
               </Space>
-              <Text type="secondary">{workflowMessage(detail)}</Text>
+              <Text style={{ color: "#aaa", fontFamily: "monospace", fontSize: 12 }}>{workflowMessage(detail)}</Text>
               <Space size={8} wrap>
-                <Text type="secondary">时间：{formatTime(detail.lastRunAt)}</Text>
-                <Text type="secondary">状态码：{detail.httpStatus == null ? "--" : detail.httpStatus}</Text>
+                <Text style={{ color: "#666", fontFamily: "monospace", fontSize: 12 }}>[TIME]: {formatTime(detail.lastRunAt)}</Text>
+                <Text style={{ color: "#666", fontFamily: "monospace", fontSize: 12 }}>[CODE]: {detail.httpStatus == null ? "NULL" : detail.httpStatus}</Text>
               </Space>
             </Space>
           </Card>
         );
       })}
 
-      {hasToken ? <Alert type="success" showIcon message="已获取 Token，流程明细已收起" /> : null}
+      {hasToken ? <Alert type="success" showIcon={false} message="[SYS] TOKEN AQUIRED. WORKFLOW FOLDED." style={{ background: "rgba(0, 255, 65, 0.1)", border: "1px solid #00ff41", color: "#00ff41", borderRadius: 0, fontFamily: "monospace" }} /> : null}
 
-      <Card size="small">
+      <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }}>
         <Space direction="vertical" size={6} style={{ width: "100%" }}>
           <Space style={{ justifyContent: "space-between", width: "100%" }}>
-            <Text strong>签到状态</Text>
+            <Text strong style={{ color: "#fff", fontFamily: "monospace" }}>[CHECK-IN STATUS]</Text>
             {checkinTag(checkinStatus)}
           </Space>
-          <Descriptions column={1} size="small">
-            <Descriptions.Item label="本月签到">{checkinStatus.totalCheckins == null ? 0 : checkinStatus.totalCheckins}</Descriptions.Item>
+          <Descriptions column={1} size="small" colon={false} labelStyle={{ color: "#666", fontFamily: "monospace" }}>
+            <Descriptions.Item label="[MONTHLY_COUNT]"><span style={{ color: "#fff", fontFamily: "monospace" }}>{checkinStatus.totalCheckins == null ? 0 : checkinStatus.totalCheckins}</span></Descriptions.Item>
           </Descriptions>
         </Space>
       </Card>
@@ -326,15 +326,15 @@ function CredentialsCell({ account }) {
   const hasLocalSession = Boolean(account.session);
 
   return (
-    <Card size="small">
-      <Descriptions column={1} size="small">
-        <Descriptions.Item label="Token">
-          <Typography.Paragraph copyable ellipsis={{ rows: 2, expandable: true, symbol: "展开" }} style={{ marginBottom: 0 }}>
-            {account.token || "--"}
+    <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }}>
+      <Descriptions column={1} size="small" colon={false} labelStyle={{ color: "#666", fontFamily: "monospace" }}>
+        <Descriptions.Item label="[TOKEN]">
+          <Typography.Paragraph copyable ellipsis={{ rows: 2, expandable: true, symbol: "展开" }} style={{ marginBottom: 0, color: "#00ff41", fontFamily: "monospace", fontSize: 12 }}>
+            {account.token || "NULL"}
           </Typography.Paragraph>
         </Descriptions.Item>
-        <Descriptions.Item label="本地 Session">
-          {hasLocalSession ? <Tag color="success">已存在</Tag> : <Tag>未存在</Tag>}
+        <Descriptions.Item label="[SESSION]">
+          {hasLocalSession ? <span style={{ color: "#00ff41", fontFamily: "monospace" }}>EXISTS</span> : <span style={{ color: "#666", fontFamily: "monospace" }}>MISSING</span>}
         </Descriptions.Item>
       </Descriptions>
     </Card>
@@ -348,11 +348,15 @@ function BalanceCell({ account }) {
   const usedBalanceDisplay = account.lastUsedBalance || quotaToUsd(usedQuota);
 
   return (
-    <Card size="small">
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
-        <Statistic title="当前余额" value={currentBalanceDisplay} />
-        <Descriptions column={1} size="small">
-          <Descriptions.Item label="已使用余额">{usedBalanceDisplay}</Descriptions.Item>
+    <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }} bodyStyle={{ padding: 4 }}>
+      <Space direction="vertical" size={2} style={{ width: "100%" }}>
+        <Statistic 
+          title={<span style={{ color: "#666", fontFamily: "monospace", fontSize: 12 }}>[BALANCE]</span>} 
+          value={currentBalanceDisplay} 
+          valueStyle={{ color: "#fff", fontFamily: "monospace", fontWeight: "bold", fontSize: 14 }} 
+        />
+        <Descriptions column={1} size="small" colon={false} labelStyle={{ color: "#666", fontFamily: "monospace" }}>
+          <Descriptions.Item label="[USED]"><span style={{ color: "#888", fontFamily: "monospace", fontSize: 12 }}>{usedBalanceDisplay}</span></Descriptions.Item>
         </Descriptions>
       </Space>
     </Card>
@@ -361,11 +365,11 @@ function BalanceCell({ account }) {
 
 function AccountCell({ account }) {
   return (
-    <Card size="small">
-      <Space direction="vertical" size={8} style={{ width: "100%" }}>
-        <Text strong style={{ fontSize: 16 }}>{account.username || "--"}</Text>
-        <Descriptions column={1} size="small">
-          <Descriptions.Item label="最近更新">{formatTime(account.updatedAt)}</Descriptions.Item>
+    <Card size="small" bordered={false} style={{ background: "transparent", border: "none" }} bodyStyle={{ padding: 4 }}>
+      <Space direction="vertical" size={2} style={{ width: "100%" }}>
+        <Text strong style={{ fontSize: 14, fontFamily: "monospace", color: "#fff", letterSpacing: 1 }}>{account.username || "UNKNOWN_USER"}</Text>
+        <Descriptions column={1} size="small" colon={false} labelStyle={{ color: "#666", fontFamily: "monospace" }}>
+          <Descriptions.Item label="[UPDATED]"><span style={{ color: "#888", fontFamily: "monospace", fontSize: 12 }}>{formatTime(account.updatedAt)}</span></Descriptions.Item>
         </Descriptions>
       </Space>
     </Card>
@@ -380,7 +384,7 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDel
   });
 
   return (
-    <Card size="small">
+    <Card size="small" bordered={false} style={{ background: "transparent", border: "none" }}>
       <Space direction="vertical" size={12} style={{ width: "100%" }}>
         {!hasToken ? (
           <Space wrap>
@@ -388,32 +392,74 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDel
               const detail = workflow[step] || {};
               const isFailed = detail.status === "failed";
               return (
-                <Button key={step} size="small" onClick={function () { onRetry(account.username, step); }} loading={rowBusy === account.username + ":retry:" + step}>
-                  {isFailed ? "重试" : "执行"}{stepLabel(step)}
+                <Button key={step} size="small" style={{ borderRadius: 0, fontFamily: "monospace", textTransform: "uppercase", background: isFailed ? "rgba(255, 0, 60, 0.1)" : "rgba(255, 255, 255, 0.1)", borderColor: isFailed ? "#ff003c" : "#333", color: isFailed ? "#ff003c" : "#fff" }} onClick={function () { onRetry(account.username, step); }} loading={rowBusy === account.username + ":retry:" + step}>
+                  {isFailed ? "RETRY " : "EXEC "}{stepLabel(step)}
                 </Button>
               );
-            }) : <Text type="secondary">流程已完成</Text>}
+            }) : <Text style={{ color: "#666", fontFamily: "monospace" }}>[WORKFLOW COMPLETE]</Text>}
           </Space>
         ) : null}
         <Space wrap>
-          <Button size="small" onClick={function () { onRefreshCheckin(account.username); }} loading={rowBusy === account.username + ":refresh-checkin"}>
-            刷新签到状态
+          <Button size="small" style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255, 255, 255, 0.05)", borderColor: "#444", color: "#ccc" }} onClick={function () { onRefreshCheckin(account.username); }} loading={rowBusy === account.username + ":refresh-checkin"}>
+            REFRESH
           </Button>
           {account.checkinStatus && account.checkinStatus.checkedInToday ? (
-            <Tag color="success">今日已签到</Tag>
+            <Tag color="#00ff41" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }}>DONE TODAY</Tag>
           ) : (
-            <Button size="small" type="primary" onClick={function () { onManualCheckin(account.username); }} loading={rowBusy === account.username + ":manual-checkin"}>
-              执行签到
+            <Button size="small" type="primary" style={{ borderRadius: 0, fontFamily: "monospace", background: "#00ff41", borderColor: "#00ff41", color: "#000", fontWeight: "bold" }} onClick={function () { onManualCheckin(account.username); }} loading={rowBusy === account.username + ":manual-checkin"}>
+              FORCE CHECK-IN
             </Button>
           )}
-          <Popconfirm title="确定要删除此账号吗？" onConfirm={function() { onDelete(account.username); }} okText="确定" cancelText="取消">
-            <Button size="small" danger loading={rowBusy === account.username + ":delete"}>
-              删除
+          <Popconfirm title="DELETE ACCOUNT?" onConfirm={function() { onDelete(account.username); }} okText="YES" cancelText="NO">
+            <Button size="small" danger style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255,0,0,0.1)", borderColor: "#ff003c" }} loading={rowBusy === account.username + ":delete"}>
+              DEL
             </Button>
           </Popconfirm>
         </Space>
       </Space>
     </Card>
+  );
+}
+
+function TerminalWindow({ title, children }) {
+  return (
+    <div style={{ border: "1px solid #333", background: "#0a0a0a", display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ padding: "4px 12px", background: "#222", borderBottom: "1px solid #333", display: "flex", alignItems: "center" }}>
+        <Text strong style={{ color: "#00ff41", fontFamily: "monospace", fontSize: 12, letterSpacing: 1 }}>{title}</Text>
+      </div>
+      <div style={{ padding: 16, flex: 1 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function GlobalStyles() {
+  return (
+    <style>{`
+      body {
+        margin: 0;
+        background-color: #050505 !important;
+        background-image: 
+          linear-gradient(rgba(0, 255, 65, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 255, 65, 0.03) 1px, transparent 1px);
+        background-size: 20px 20px;
+        color: #e0e0e0;
+      }
+      .ant-layout { background: transparent !important; }
+      .ant-card { border-radius: 0 !important; }
+      .ant-btn { border-radius: 0 !important; text-transform: uppercase; font-family: monospace; letter-spacing: 0.5px; }
+      .ant-alert { border-radius: 0 !important; font-family: monospace; }
+      .ant-table-wrapper { background: #0a0a0a; border: 1px solid #333; }
+      .ant-table { background: transparent !important; }
+      .ant-table-thead > tr > th { font-family: monospace; text-transform: uppercase; letter-spacing: 1px; }
+      .ant-table-tbody > tr > td { border-bottom: 1px solid #222 !important; }
+      ::selection { background: rgba(0, 255, 65, 0.3); color: #fff; }
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: #050505; border-left: 1px solid #222; }
+      ::-webkit-scrollbar-thumb { background: #333; border: 1px solid #444; }
+      ::-webkit-scrollbar-thumb:hover { background: #00ff41; }
+    `}</style>
   );
 }
 
@@ -429,7 +475,7 @@ function Dashboard() {
   const [registerTask, setRegisterTask] = useState(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [registerCount, setRegisterCount] = useState(5);
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10000, total: 0 });
   const [filters, setFilters] = useState({
     keyword: "",
     statusMode: "all",
@@ -494,7 +540,7 @@ function Dashboard() {
 
   async function loadAccounts(silent, nextPage, nextPageSize, nextFilters) {
     const page = nextPage || pagination.current;
-    const pageSize = nextPageSize || pagination.pageSize;
+    const pageSize = 10000;
     const activeFilters = nextFilters || filters;
 
     if (!silent) setLoading(true);
@@ -835,46 +881,46 @@ function Dashboard() {
 
   const columns = [
     {
-      title: "账号",
+      title: <span style={{ color: "#888", fontFamily: "monospace" }}>[ID]</span>,
       dataIndex: "username",
       key: "account",
-      width: 240,
+      width: 160,
       render: function (_, record) {
         return <AccountCell account={record} />;
       },
     },
     {
-      title: "流程状态",
+      title: <span style={{ color: "#888", fontFamily: "monospace" }}>[WORKFLOW_STATE]</span>,
       dataIndex: "workflow",
       key: "workflow",
-      width: 380,
+      width: 280,
       render: function (_, record) {
         return <AccountWorkflow account={record} />;
       },
     },
     {
-      title: "凭据",
+      title: <span style={{ color: "#888", fontFamily: "monospace" }}>[CREDENTIALS]</span>,
       dataIndex: "token",
       key: "credentials",
-      width: 320,
+      width: 240,
       render: function (_, record) {
         return <CredentialsCell account={record} />;
       },
     },
     {
-      title: "余额",
+      title: <span style={{ color: "#888", fontFamily: "monospace" }}>[FUNDS]</span>,
       dataIndex: "balance",
       key: "balance",
-      width: 280,
+      width: 200,
       render: function (_, record) {
         return <BalanceCell account={record} />;
       },
     },
     {
-      title: "操作",
+      title: <span style={{ color: "#888", fontFamily: "monospace" }}>[EXECUTE]</span>,
       dataIndex: "actions",
       key: "actions",
-      width: 260,
+      width: 200,
       render: function (_, record) {
         return (
           <ActionCell
@@ -1057,15 +1103,8 @@ function Dashboard() {
                   rowKey="username"
                   dataSource={accounts}
                   columns={columns}
-                  pagination={{
-                    current: pagination.current,
-                    pageSize: pagination.pageSize,
-                    total: pagination.total,
-                    showSizeChanger: true,
-                    showTotal: function (total) {
-                      return "共 " + total + " 条";
-                    },
-                  }}
+                  pagination={false}
+                  size="small"
                   scroll={{ x: 1600 }}
                   onChange={function (nextPagination) {
                     void loadAccounts(false, nextPagination.current, nextPagination.pageSize, filters);
@@ -1090,11 +1129,43 @@ function AppRoot() {
   return (
     <ConfigProvider
       theme={{
-        algorithm: theme.defaultAlgorithm,
+        algorithm: theme.darkAlgorithm,
         token: {
-          colorPrimary: "#1677ff",
-          borderRadius: 8,
+          colorPrimary: "#00ff41",
+          colorBgBase: "#050505",
+          colorBgContainer: "#111111",
+          colorBgElevated: "#1a1a1a",
+          colorBorder: "#333333",
+          colorTextBase: "#e0e0e0",
+          fontFamily: "'Inter', sans-serif",
+          borderRadius: 0,
+          wireframe: true,
         },
+        components: {
+          Card: {
+            headerBg: "#111",
+            colorBorderSecondary: "#333",
+          },
+          Table: {
+            headerBg: "#0a0a0a",
+            headerColor: "#00ff41",
+            borderColor: "#222",
+            rowHoverBg: "#151515",
+          },
+          Button: {
+            defaultBg: "#111",
+            defaultBorderColor: "#444",
+            defaultColor: "#fff",
+          },
+          Input: {
+            colorBgContainer: "#0a0a0a",
+            colorBorder: "#444",
+          },
+          Select: {
+            colorBgContainer: "#0a0a0a",
+            colorBorder: "#444",
+          }
+        }
       }}
     >
       <App>
