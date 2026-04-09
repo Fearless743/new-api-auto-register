@@ -13,9 +13,12 @@ const DEFAULT_STORE = {
     accounts: [],
   },
   metadata: {
-    version: 1,
+    version: 2,
     createdAt: null,
     updatedAt: null,
+  },
+  settings: {
+    baseUrl: "",
   },
 };
 
@@ -143,6 +146,12 @@ function normalizeBalanceSnapshot(snapshot = {}) {
   };
 }
 
+function normalizeSettings(settings = {}) {
+  return {
+    baseUrl: String(settings.baseUrl || settings.base_url || "").trim(),
+  };
+}
+
 function normalizeStore(store = {}) {
   const now = new Date().toISOString();
   return {
@@ -150,12 +159,14 @@ function normalizeStore(store = {}) {
     checkins: Array.isArray(store.checkins) ? store.checkins.map(normalizeCheckinEntry) : [],
     balanceSnapshot: normalizeBalanceSnapshot(store.balanceSnapshot),
     metadata: {
-      version: 1,
+      version: 2,
       createdAt: store.metadata?.createdAt || now,
       updatedAt: store.metadata?.updatedAt || now,
     },
+    settings: normalizeSettings(store.settings),
   };
 }
+
 
 export async function ensureStoreFile(storePath) {
   await mkdir(dirname(storePath), { recursive: true });
@@ -247,12 +258,11 @@ export function setBalanceSnapshotInStore(store, snapshot) {
   return store;
 }
 
-export function listUniqueTokens(store) {
-  return Array.from(
-    new Set(
-      store.accounts
-        .map((account) => String(account.token || "").trim())
-        .filter((token) => token.startsWith("sk-")),
-    ),
-  );
+export function setBaseUrlInStore(store, baseUrl) {
+  store.settings = normalizeSettings({ ...(store.settings || {}), baseUrl });
+  return store;
+}
+
+export function getBaseUrlFromStore(store) {
+  return String(store?.settings?.baseUrl || "").trim();
 }

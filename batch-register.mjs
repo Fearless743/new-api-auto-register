@@ -3,13 +3,16 @@ import { randomBytes } from "node:crypto";
 import {
   ensureStoreFile,
   findAccount,
+  getBaseUrlFromStore,
   readStore,
+  setBaseUrlInStore,
   updateStore,
   upsertAccountInStore,
 } from "./storage.mjs";
 
 const CONFIG = {
-  baseUrl: process.env.BASE_URL || "https://open.lxcloud.dev",
+  baseUrl: process.env.BASE_URL || "https://ai.xem8k5.top",
+  enableEmail: asBool(process.env.ENABLE_EMAIL, false),
   count: Number(process.env.COUNT || 10),
   requestDelayMs: Number(process.env.DELAY_MS || 5000),
   operationDelayMs: Number(process.env.OP_DELAY_MS || 1000),
@@ -29,6 +32,7 @@ const REGISTER_URL = `${CONFIG.baseUrl}/api/user/register?turnstile=`;
 const LOGIN_URL = `${CONFIG.baseUrl}/api/user/login?turnstile=`;
 const TOKEN_CREATE_URL = `${CONFIG.baseUrl}/api/token/`;
 const TOKEN_LIST_URL = `${CONFIG.baseUrl}/api/token/?p=1&size=10`;
+const VERIFY_EMAIL_URL = `${CONFIG.baseUrl}/api/verification`;
 
 function asBool(value, defaultValue) {
   if (value == null || value === "") {
@@ -77,21 +81,43 @@ async function saveAccountPatch(username, patch) {
   });
 }
 
+async function syncBaseUrlToStore() {
+  await updateStore(CONFIG.storePath, (store) => setBaseUrlInStore(store, CONFIG.baseUrl));
+}
+
+async function resolveBaseUrl() {
+  const store = await readStore(CONFIG.storePath);
+  const storedBaseUrl = getBaseUrlFromStore(store);
+  if (storedBaseUrl) {
+    CONFIG.baseUrl = storedBaseUrl;
+  }
+  return CONFIG.baseUrl;
+}
+
 function workflowStateFromResult(result, fallbackMessage) {
   return {
     status: result?.ok ? "success" : "failed",
     lastRunAt: new Date().toISOString(),
     httpStatus: result?.status ?? null,
-    message:
-      String(
-        result?.response?.message || result?.response?.error || result?.response?.raw || fallbackMessage || "",
-      ).trim(),
+    message: String(
+      result?.response?.message ||
+        result?.response?.error ||
+        result?.response?.raw ||
+        fallbackMessage ||
+        "",
+    ).trim(),
     requestUrl: result?.requestUrl || "",
     attempt: result?.attempt ?? null,
   };
 }
 
-async function saveWorkflowStep(username, password, step, result, extraPatch = {}) {
+async function saveWorkflowStep(
+  username,
+  password,
+  step,
+  result,
+  extraPatch = {},
+) {
   await saveAccountPatch(username, {
     ...(password ? { password } : {}),
     workflow: {
@@ -102,7 +128,7 @@ async function saveWorkflowStep(username, password, step, result, extraPatch = {
 }
 
 async function registerWithCredential(username, password) {
-  const payload = {
+  let payload = {
     username,
     password,
     password2: password,
@@ -111,11 +137,170 @@ async function registerWithCredential(username, password) {
     wechat_verification_code: "",
     aff_code: "",
   };
+  if (CONFIG.enableEmail) {
+    // Emailnator 方案实现
+    const emailnatorHeaders = {
+      Accept: "application/json, text/plain, */*",
+      "Content-Type": "application/json",
+      Origin: "https://www.emailnator.com",
+      Referer: "https://www.emailnator.com/",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
+      "X-Requested-With": "XMLHttpRequest",
+    };
+
+    // 1. 获取初始 Session 和 XSRF Token
+    const initRes = await fetch("https://www.emailnator.com/");
+    const initCookies = readSetCookie(initRes.headers);
+    let xsrfToken =
+      extractCookiePairs(initCookies)
+        .find((c) => c.startsWith("XSRF-TOKEN="))
+        ?.split("=")[1]
+        ?.replace(/%3D/g, "=") || "";
+    let sessionToken =
+      extractCookiePairs(initCookies)
+        .find((c) => c.startsWith("gmailnator_session="))
+        ?.split("=")[1] || "";
+
+    const updateAuthHeaders = (cookies) => {
+      const pairs = extractCookiePairs(cookies);
+      const newXsrf = pairs
+        .find((c) => c.startsWith("XSRF-TOKEN="))
+        ?.split("=")[1]
+        ?.replace(/%3D/g, "=");
+      const newSesh = pairs
+        .find((c) => c.startsWith("gmailnator_session="))
+        ?.split("=")[1];
+      if (newXsrf) xsrfToken = newXsrf;
+      if (newSesh) sessionToken = newSesh;
+
+      emailnatorHeaders["X-Xsrf-Token"] = xsrfToken;
+      emailnatorHeaders["Cookie"] =
+        `XSRF-TOKEN=${xsrfToken.replace(/=/g, "%3D")}; gmailnator_session=${sessionToken};`;
+    };
+
+    updateAuthHeaders(initCookies);
+
+    // 2. 生成邮箱
+    console.log("正在通过 Emailnator 生成临时邮箱...");
+    const genRes = await fetch("https://www.emailnator.com/generate-email", {
+      method: "POST",
+      headers: emailnatorHeaders,
+      body: JSON.stringify({ email: ["plusGmail", "dotGmail"] }),
+    });
+    updateAuthHeaders(readSetCookie(genRes.headers));
+    const genData = await genRes.json();
+    payload.email = genData.email[0];
+    console.log(`获取到 Emailnator 邮箱: ${payload.email}`);
+
+    // 3. 验证邮件发送 (原有逻辑保持，仅替换邮件接收部分)
+    console.log(`正在发送验证邮件... email=${payload.email}`);
+    await fetch(VERIFY_EMAIL_URL + "?email=" + payload.email + "&turnstile=");
+
+    const maxRetries = 30;
+    let retries = 0;
+    while (payload.verification_code == "" && retries < maxRetries) {
+      retries++;
+      await sleep(10000);
+      console.log(
+        `[${retries}/${maxRetries}] 正在 Emailnator 检查新邮件... email=${payload.email}`,
+      );
+
+      try {
+        updateAuthHeaders([]); // 保持当前的 Cookie 状态
+        const listRes = await fetch("https://www.emailnator.com/message-list", {
+          method: "POST",
+          headers: emailnatorHeaders,
+          body: JSON.stringify({ email: payload.email }),
+        });
+
+        if (listRes.status === 429) {
+          console.warn(
+            `[${retries}/${maxRetries}] Emailnator 限流(429)，等待 10 秒...`,
+          );
+          await sleep(10000);
+          continue;
+        }
+
+        updateAuthHeaders(readSetCookie(listRes.headers));
+        const listText = await listRes.text();
+        let listData;
+        try {
+          listData = JSON.parse(listText);
+        } catch (e) {
+          console.warn(
+            `[${retries}/${maxRetries}] Emailnator 响应解析失败 (可能被限流或 HTML 报错):`,
+            listText.slice(0, 100),
+          );
+          continue;
+        }
+        console.log(listData);
+        const message = listData.messageData?.find(
+          (m) => m.messageID !== "ADSVPN",
+        );
+
+        if (message) {
+          // 如果 messageID 看起来像是非法的（比如 ADSVPN 这种干扰项），我们可以根据长度或格式过滤
+          if (!message.messageID || message.messageID.length < 5) {
+            console.log(`跳过疑似无效的 MessageID: ${message.messageID}`);
+            continue;
+          }
+          console.log(`发现匹配邮件，ID: ${message.messageID}`);
+          const msgRes = await fetch(
+            "https://www.emailnator.com/message-list",
+            {
+              method: "POST",
+              headers: emailnatorHeaders,
+              body: JSON.stringify({
+                email: payload.email,
+                messageID: message.messageID,
+              }),
+            },
+          );
+          updateAuthHeaders(readSetCookie(msgRes.headers));
+          const msgContent = await msgRes.text();
+          const codeMatch =
+            msgContent.match(/<strong>(\w+)<\/strong>/) ||
+            msgContent.match(/(\d{6})/); // 兼容不同格式
+          if (codeMatch) {
+            payload.verification_code = codeMatch[1];
+            console.log(`成功获取验证码: ${payload.verification_code}`);
+          }
+        } else {
+          console.log(`[${retries}/${maxRetries}] 暂未发现目标邮件...`);
+        }
+      } catch (e) {
+        console.warn(
+          `[${retries}/${maxRetries}] Emailnator 接口请求失败:`,
+          e.message,
+        );
+      }
+    }
+
+    if (payload.verification_code == "") {
+      console.error(`[${username}] 最终未获取到验证码，放弃本次注册`);
+      return {
+        ok: false,
+        status: -1,
+        startedAt: new Date().toISOString(),
+        username,
+        password,
+        requestUrl: "email-timeout",
+        requestHeaders: {},
+        response: { error: "Timed out waiting for verification code" },
+      };
+    }
+  }
 
   const startedAt = new Date().toISOString();
   const requestHeaders = buildHeaders();
 
-  for (let attempt = 1; attempt <= CONFIG.registerMaxRetries + 1; attempt += 1) {
+  console.log(`[${username}] 正在提交注册请求...`);
+  for (
+    let attempt = 1;
+    attempt <= CONFIG.registerMaxRetries + 1;
+    attempt += 1
+  ) {
     try {
       const res = await fetch(REGISTER_URL, {
         method: "POST",
@@ -125,6 +310,7 @@ async function registerWithCredential(username, password) {
 
       const parsed = await parseResponseBody(res);
       const ok = isApiSuccess(res.ok, parsed);
+      console.log(`[${username}] 注册响应: status=${res.status} ok=${ok}`);
 
       if (res.status === 429 && attempt <= CONFIG.registerMaxRetries) {
         const waitMs = computeRateLimitDelay(attempt, res.headers);
@@ -493,7 +679,8 @@ async function loginOne(username, password) {
       setCookies.push(fallbackSession);
     }
     const cookieHeader = buildCookieHeader(setCookies);
-    const newApiUser = parsePossibleUserId(parsed) || CONFIG.defaultNewApiUser || "";
+    const newApiUser =
+      parsePossibleUserId(parsed) || CONFIG.defaultNewApiUser || "";
     const accessToken =
       parsePossibleAccessToken(parsed) || CONFIG.staticAccessToken;
 
@@ -601,7 +788,11 @@ async function createTokenOne(loginResult) {
 
   try {
     const requestHeaders = {
-      ...tokenApiHeaders(loginResult.cookieHeader, loginResult.newApiUser, true),
+      ...tokenApiHeaders(
+        loginResult.cookieHeader,
+        loginResult.newApiUser,
+        true,
+      ),
       ...(loginResult.accessToken
         ? { Authorization: `Bearer ${loginResult.accessToken}` }
         : {}),
@@ -637,7 +828,11 @@ async function createTokenOne(loginResult) {
       username: loginResult.username,
       requestUrl: TOKEN_CREATE_URL,
       requestHeaders: {
-        ...tokenApiHeaders(loginResult.cookieHeader, loginResult.newApiUser, true),
+        ...tokenApiHeaders(
+          loginResult.cookieHeader,
+          loginResult.newApiUser,
+          true,
+        ),
         ...(loginResult.accessToken
           ? { Authorization: `Bearer ${loginResult.accessToken}` }
           : {}),
@@ -650,15 +845,48 @@ async function createTokenOne(loginResult) {
   }
 }
 
+async function createTokenByIdOne(loginResult, tokenId) {
+  const startedAt = new Date().toISOString();
+  const requestHeaders = {
+    ...tokenApiHeaders(loginResult.cookieHeader, loginResult.newApiUser, false),
+    ...(loginResult.accessToken
+      ? { Authorization: `Bearer ${loginResult.accessToken}` }
+      : {}),
+  };
+
+  const res = await fetch(`${CONFIG.baseUrl}/api/token/${tokenId}/key`, {
+    method: "POST",
+    headers: requestHeaders,
+  });
+  const parsed = await parseResponseBody(res);
+  const ok = isApiSuccess(res.ok, parsed);
+
+  return {
+    ok,
+    httpOk: res.ok,
+    status: res.status,
+    startedAt,
+    username: loginResult.username,
+    requestUrl: `${CONFIG.baseUrl}/api/token/${tokenId}/key`,
+    requestHeaders,
+    response: parsed,
+    tokenValue: extractTokenValue(parsed),
+  };
+}
+
 async function listTokensOne(loginResult) {
   const startedAt = new Date().toISOString();
 
   try {
     const requestHeaders = {
-      ...tokenApiHeaders(loginResult.cookieHeader, loginResult.newApiUser, false),
+      ...tokenApiHeaders(
+        loginResult.cookieHeader,
+        loginResult.newApiUser,
+        false,
+      ),
       ...(loginResult.accessToken
         ? { Authorization: `Bearer ${loginResult.accessToken}` }
-          : {}),
+        : {}),
     };
 
     const res = await fetch(TOKEN_LIST_URL, {
@@ -687,7 +915,11 @@ async function listTokensOne(loginResult) {
       username: loginResult.username,
       requestUrl: TOKEN_LIST_URL,
       requestHeaders: {
-        ...tokenApiHeaders(loginResult.cookieHeader, loginResult.newApiUser, false),
+        ...tokenApiHeaders(
+          loginResult.cookieHeader,
+          loginResult.newApiUser,
+          false,
+        ),
         ...(loginResult.accessToken
           ? { Authorization: `Bearer ${loginResult.accessToken}` }
           : {}),
@@ -700,6 +932,7 @@ async function listTokensOne(loginResult) {
 export async function runBatchRegister(inputCount) {
   const targetCount = resolveCount(inputCount);
   await ensureStoreFile(CONFIG.storePath);
+  await syncBaseUrlToStore();
 
   let success = 0;
   let failed = 0;
@@ -711,7 +944,21 @@ export async function runBatchRegister(inputCount) {
   let tokenListFailed = 0;
 
   for (let i = 0; i < targetCount; i += 1) {
-    const registerResult = await registerOne(i + 1);
+    let registerResult;
+    try {
+      registerResult = await registerOne(i + 1);
+    } catch (e) {
+      console.error(`[${i + 1}/${targetCount}] registerOne 抛出异常:`, e);
+      failed += 1;
+      continue;
+    }
+
+    if (!registerResult) {
+      console.error(`[${i + 1}/${targetCount}] registerOne 返回空值`);
+      failed += 1;
+      continue;
+    }
+
     await saveWorkflowStep(
       registerResult.username,
       registerResult.password,
@@ -740,17 +987,30 @@ export async function runBatchRegister(inputCount) {
       await sleep(CONFIG.operationDelayMs);
     }
 
-    const loginResult = await loginOne(registerResult.username, registerResult.password);
-    const sessionCookie = pickSessionCookie(extractCookiePairs(loginResult.setCookies));
-    await saveWorkflowStep(registerResult.username, registerResult.password, "login", loginResult, {
-      newApiUser: loginResult.newApiUser,
-      session: sessionCookie,
-      lastLoginAt: loginResult.ok ? new Date().toISOString() : null,
-    });
+    const loginResult = await loginOne(
+      registerResult.username,
+      registerResult.password,
+    );
+    const sessionCookie = pickSessionCookie(
+      extractCookiePairs(loginResult.setCookies),
+    );
+    await saveWorkflowStep(
+      registerResult.username,
+      registerResult.password,
+      "login",
+      loginResult,
+      {
+        newApiUser: loginResult.newApiUser,
+        session: sessionCookie,
+        lastLoginAt: loginResult.ok ? new Date().toISOString() : null,
+      },
+    );
 
     if (!loginResult.ok) {
       loginFailed += 1;
-      const reason = loginResult?.response?.message ? ` - ${loginResult.response.message}` : "";
+      const reason = loginResult?.response?.message
+        ? ` - ${loginResult.response.message}`
+        : "";
       console.log(
         `[${i + 1}/${targetCount}] 登录失败(${loginResult.status}) ${registerResult.username}${reason}`,
       );
@@ -801,7 +1061,10 @@ export async function runBatchRegister(inputCount) {
 
     const tokenListResult = await listTokensOne(loginResult);
     const tokenFromList = tokenListResult.ok
-      ? extractTokenFromList(tokenListResult.response, tokenCreateResult.tokenName)
+      ? extractTokenFromList(
+          tokenListResult.response,
+          tokenCreateResult.tokenName,
+        )
       : "";
     const finalTokenValue = `sk-${tokenCreateResult.tokenValue || tokenFromList}`;
 
@@ -855,7 +1118,13 @@ export async function runBatchRegister(inputCount) {
 }
 
 export async function retryAccountWorkflow(username, step) {
-  const allowedSteps = new Set(["register", "login", "tokenCreate", "tokenList"]);
+  await resolveBaseUrl();
+  const allowedSteps = new Set([
+    "register",
+    "login",
+    "tokenCreate",
+    "tokenList",
+  ]);
   if (!allowedSteps.has(step)) {
     throw new Error("Invalid workflow step");
   }
@@ -872,11 +1141,21 @@ export async function retryAccountWorkflow(username, step) {
 
   if (step === "register") {
     if (!currentUsername || !currentPassword) {
-      throw new Error("Account username and password are required for register retry");
+      throw new Error(
+        "Account username and password are required for register retry",
+      );
     }
 
-    const registerResult = await registerWithCredential(currentUsername, currentPassword);
-    await saveWorkflowStep(currentUsername, currentPassword, "register", registerResult);
+    const registerResult = await registerWithCredential(
+      currentUsername,
+      currentPassword,
+    );
+    await saveWorkflowStep(
+      currentUsername,
+      currentPassword,
+      "register",
+      registerResult,
+    );
     if (!registerResult.ok) {
       return { username: currentUsername, step, result: registerResult };
     }
@@ -884,16 +1163,28 @@ export async function retryAccountWorkflow(username, step) {
 
   if (["login", "tokenCreate", "tokenList"].includes(step)) {
     if (!currentUsername || !currentPassword) {
-      throw new Error("Account username and password are required for login retry");
+      throw new Error(
+        "Account username and password are required for login retry",
+      );
     }
 
     loginResult = await loginOne(currentUsername, currentPassword);
-    const sessionCookie = pickSessionCookie(extractCookiePairs(loginResult.setCookies));
-    await saveWorkflowStep(currentUsername, currentPassword, "login", loginResult, {
-      newApiUser: loginResult.newApiUser || account.newApiUser,
-      session: sessionCookie || account.session,
-      lastLoginAt: loginResult.ok ? new Date().toISOString() : account.lastLoginAt,
-    });
+    const sessionCookie = pickSessionCookie(
+      extractCookiePairs(loginResult.setCookies),
+    );
+    await saveWorkflowStep(
+      currentUsername,
+      currentPassword,
+      "login",
+      loginResult,
+      {
+        newApiUser: loginResult.newApiUser || account.newApiUser,
+        session: sessionCookie || account.session,
+        lastLoginAt: loginResult.ok
+          ? new Date().toISOString()
+          : account.lastLoginAt,
+      },
+    );
 
     if (!loginResult.ok) {
       return { username: currentUsername, step: "login", result: loginResult };
@@ -902,27 +1193,49 @@ export async function retryAccountWorkflow(username, step) {
 
   if (["tokenCreate", "tokenList"].includes(step)) {
     const tokenCreateResult = await createTokenOne(loginResult);
-    await saveWorkflowStep(currentUsername, currentPassword, "tokenCreate", tokenCreateResult);
+    await saveWorkflowStep(
+      currentUsername,
+      currentPassword,
+      "tokenCreate",
+      tokenCreateResult,
+    );
     if (!tokenCreateResult.ok) {
-      return { username: currentUsername, step: "tokenCreate", result: tokenCreateResult };
+      return {
+        username: currentUsername,
+        step: "tokenCreate",
+        result: tokenCreateResult,
+      };
     }
 
     const tokenListResult = await listTokensOne(loginResult);
     const tokenFromList = tokenListResult.ok
-      ? extractTokenFromList(tokenListResult.response, tokenCreateResult.tokenName)
+      ? extractTokenFromList(
+          tokenListResult.response,
+          tokenCreateResult.tokenName,
+        )
       : "";
     const finalTokenValue = tokenCreateResult.ok
       ? `sk-${tokenCreateResult.tokenValue || tokenFromList}`
       : account.token;
 
-    await saveWorkflowStep(currentUsername, currentPassword, "tokenList", tokenListResult, {
-      token: finalTokenValue || account.token,
-      session: loginResult.cookieHeader || account.session,
-      newApiUser: loginResult.newApiUser || account.newApiUser,
-    });
+    await saveWorkflowStep(
+      currentUsername,
+      currentPassword,
+      "tokenList",
+      tokenListResult,
+      {
+        token: finalTokenValue || account.token,
+        session: loginResult.cookieHeader || account.session,
+        newApiUser: loginResult.newApiUser || account.newApiUser,
+      },
+    );
 
     if (!tokenListResult.ok) {
-      return { username: currentUsername, step: "tokenList", result: tokenListResult };
+      return {
+        username: currentUsername,
+        step: "tokenList",
+        result: tokenListResult,
+      };
     }
   }
 
