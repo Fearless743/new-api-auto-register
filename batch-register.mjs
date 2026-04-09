@@ -118,12 +118,20 @@ async function saveWorkflowStep(
   result,
   extraPatch = {},
 ) {
-  await saveAccountPatch(username, {
-    ...(password ? { password } : {}),
-    workflow: {
-      [step]: workflowStateFromResult(result),
-    },
-    ...extraPatch,
+  await updateStore(CONFIG.storePath, (store) => {
+    const existingAccount = findAccount(store, username);
+    const currentWorkflow = existingAccount ? existingAccount.workflow : {};
+    
+    upsertAccountInStore(store, {
+      username, // need to pass username
+      ...(password ? { password } : {}),
+      workflow: {
+        ...currentWorkflow,
+        [step]: workflowStateFromResult(result),
+      },
+      ...extraPatch,
+    });
+    return store;
   });
 }
 
