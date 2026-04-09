@@ -1155,6 +1155,7 @@ export async function retryAccountWorkflow(username, step) {
     "login",
     "tokenCreate",
     "tokenList",
+    "tokenRefresh"
   ]);
   if (!allowedSteps.has(step)) {
     throw new Error("Invalid workflow step");
@@ -1192,7 +1193,7 @@ export async function retryAccountWorkflow(username, step) {
     }
   }
 
-  if (["login", "tokenCreate", "tokenList"].includes(step)) {
+  if (["login", "tokenCreate", "tokenList", "tokenRefresh"].includes(step)) {
     if (!currentUsername || !currentPassword) {
       throw new Error(
         "Account username and password are required for login retry",
@@ -1297,6 +1298,54 @@ export async function retryAccountWorkflow(username, step) {
         result: tokenListResult,
       };
     }
+  }
+
+  if (step === "tokenRefresh") {
+    let finalTokenValue = "";
+    
+    const tokenListResult = await listTokensOne(loginResult);
+    if (!tokenListResult.ok) {
+        await saveWorkflowStep(
+            currentUsername,
+            currentPassword,
+            "tokenRefresh",
+            tokenListResult
+        );
+        return {
+            username: currentUsername,
+            step: "tokenRefresh",
+            result: tokenListResult,
+        };
+    }
+    
+    const tokenName = buildTokenName(currentUsername);
+    const items = tokenListResult.response?.data?.items || [];
+    const targetToken = items.find((item) => item?.name === tokenName) || items[0];
+    
+    if (targetToken && targetToken.id) {
+        const keyResult = await createTokenByIdOne(loginResult, targetToken.id);
+        if (keyResult.ok && keyResult.tokenValue) {
+            finalTokenValue = `sk-${keyResult.tokenValue}`;
+        } else if (targetToken.key) {
+            finalTokenValue = `sk-${targetToken.key}`;
+        }
+    } else if (targetToken && targetToken.key) {
+        finalTokenValue = `sk-${targetToken.key}`;
+    }
+
+    const refreshResult = { ok: true, status: 200, response: { message: "Token refreshed successfully" } };
+    
+    await saveWorkflowStep(
+      currentUsername,
+      currentPassword,
+      "tokenRefresh",
+      refreshResult,
+      {
+        token: finalTokenValue || account.token,
+        session: loginResult.cookieHeader || account.session,
+        newApiUser: loginResult.newApiUser || account.newApiUser,
+      },
+    );
   }
 
   return { username: currentUsername, step, ok: true };

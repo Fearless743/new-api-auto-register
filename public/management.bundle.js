@@ -83720,6 +83720,7 @@ function stepLabel(step) {
     login: "\u767B\u5F55",
     tokenCreate: "\u521B\u5EFA Token",
     tokenList: "\u67E5\u8BE2 Token",
+    tokenRefresh: "\u91CD\u65B0\u83B7\u53D6 Token",
     checkin: "\u7B7E\u5230"
   }[step] || step;
 }
@@ -84557,6 +84558,7 @@ function Dashboard() {
                 { value: "login", label: "\u767B\u5F55" },
                 { value: "tokenCreate", label: "\u521B\u5EFA Token" },
                 { value: "tokenList", label: "\u67E5\u8BE2 Token" },
+                { value: "tokenRefresh", label: "\u91CD\u65B0\u83B7\u53D6 Token" },
                 { value: "checkin", label: "\u7B7E\u5230" }
               ],
               onChange: function(value) {
