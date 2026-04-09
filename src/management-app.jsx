@@ -285,36 +285,36 @@ function AccountWorkflow({ account }) {
   const visibleSteps = getPendingWorkflowSteps(account);
 
   return (
-    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+    <Space direction="vertical" size={4} style={{ width: "100%" }}>
       {!hasToken && visibleSteps.map(function (step) {
         const detail = workflow[step] || {};
         return (
-          <Card key={step} size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }}>
-            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+          <Card key={step} size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }} bodyStyle={{ padding: 4 }}>
+            <Space direction="vertical" size={2} style={{ width: "100%" }}>
               <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                <Text strong style={{ color: "#fff", fontFamily: "monospace", textTransform: "uppercase" }}>{stepLabel(step)}</Text>
+                <Text strong style={{ color: "#fff", fontFamily: "monospace", textTransform: "uppercase", fontSize: 12 }}>{stepLabel(step)}</Text>
                 {statusTag(detail.status)}
               </Space>
-              <Text style={{ color: "#aaa", fontFamily: "monospace", fontSize: 12 }}>{workflowMessage(detail)}</Text>
-              <Space size={8} wrap>
-                <Text style={{ color: "#666", fontFamily: "monospace", fontSize: 12 }}>[TIME]: {formatTime(detail.lastRunAt)}</Text>
-                <Text style={{ color: "#666", fontFamily: "monospace", fontSize: 12 }}>[CODE]: {detail.httpStatus == null ? "NULL" : detail.httpStatus}</Text>
+              <Text style={{ color: "#aaa", fontFamily: "monospace", fontSize: 10 }}>{workflowMessage(detail)}</Text>
+              <Space size={4} wrap>
+                <Text style={{ color: "#666", fontFamily: "monospace", fontSize: 10 }}>[TIME]: {formatTime(detail.lastRunAt)}</Text>
+                <Text style={{ color: "#666", fontFamily: "monospace", fontSize: 10 }}>[CODE]: {detail.httpStatus == null ? "NULL" : detail.httpStatus}</Text>
               </Space>
             </Space>
           </Card>
         );
       })}
 
-      {hasToken ? <Alert type="success" showIcon={false} message="[SYS] TOKEN AQUIRED. WORKFLOW FOLDED." style={{ background: "rgba(0, 255, 65, 0.1)", border: "1px solid #00ff41", color: "#00ff41", borderRadius: 0, fontFamily: "monospace" }} /> : null}
+      {hasToken ? <Alert type="success" showIcon={false} message="[SYS] TOKEN AQUIRED." style={{ background: "rgba(0, 255, 65, 0.1)", border: "1px solid #00ff41", color: "#00ff41", borderRadius: 0, fontFamily: "monospace", padding: "2px 8px" }} /> : null}
 
-      <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }}>
-        <Space direction="vertical" size={6} style={{ width: "100%" }}>
+      <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }} bodyStyle={{ padding: 4 }}>
+        <Space direction="vertical" size={2} style={{ width: "100%" }}>
           <Space style={{ justifyContent: "space-between", width: "100%" }}>
-            <Text strong style={{ color: "#fff", fontFamily: "monospace" }}>[CHECK-IN STATUS]</Text>
+            <Text strong style={{ color: "#fff", fontFamily: "monospace", fontSize: 12 }}>[CHECK-IN]</Text>
             {checkinTag(checkinStatus)}
           </Space>
           <Descriptions column={1} size="small" colon={false} labelStyle={{ color: "#666", fontFamily: "monospace" }}>
-            <Descriptions.Item label="[MONTHLY_COUNT]"><span style={{ color: "#fff", fontFamily: "monospace" }}>{checkinStatus.totalCheckins == null ? 0 : checkinStatus.totalCheckins}</span></Descriptions.Item>
+            <Descriptions.Item label="[MONTHLY_COUNT]"><span style={{ color: "#fff", fontFamily: "monospace", fontSize: 12 }}>{checkinStatus.totalCheckins == null ? 0 : checkinStatus.totalCheckins}</span></Descriptions.Item>
           </Descriptions>
         </Space>
       </Card>
@@ -326,15 +326,15 @@ function CredentialsCell({ account }) {
   const hasLocalSession = Boolean(account.session);
 
   return (
-    <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }}>
+    <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }} bodyStyle={{ padding: 4 }}>
       <Descriptions column={1} size="small" colon={false} labelStyle={{ color: "#666", fontFamily: "monospace" }}>
         <Descriptions.Item label="[TOKEN]">
-          <Typography.Paragraph copyable ellipsis={{ rows: 2, expandable: true, symbol: "展开" }} style={{ marginBottom: 0, color: "#00ff41", fontFamily: "monospace", fontSize: 12 }}>
+          <Typography.Paragraph copyable ellipsis={{ rows: 1, expandable: true, symbol: "展开" }} style={{ marginBottom: 0, color: "#00ff41", fontFamily: "monospace", fontSize: 12 }}>
             {account.token || "NULL"}
           </Typography.Paragraph>
         </Descriptions.Item>
         <Descriptions.Item label="[SESSION]">
-          {hasLocalSession ? <span style={{ color: "#00ff41", fontFamily: "monospace" }}>EXISTS</span> : <span style={{ color: "#666", fontFamily: "monospace" }}>MISSING</span>}
+          {hasLocalSession ? <span style={{ color: "#00ff41", fontFamily: "monospace", fontSize: 12 }}>EXISTS</span> : <span style={{ color: "#666", fontFamily: "monospace", fontSize: 12 }}>MISSING</span>}
         </Descriptions.Item>
       </Descriptions>
     </Card>
@@ -384,34 +384,34 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDel
   });
 
   return (
-    <Card size="small" bordered={false} style={{ background: "transparent", border: "none" }}>
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+    <Card size="small" bordered={false} style={{ background: "transparent", border: "none" }} bodyStyle={{ padding: 4 }}>
+      <Space direction="vertical" size={8} style={{ width: "100%" }}>
         {!hasToken ? (
           <Space wrap>
             {actionableSteps.length ? actionableSteps.map(function (step) {
               const detail = workflow[step] || {};
               const isFailed = detail.status === "failed";
               return (
-                <Button key={step} size="small" style={{ borderRadius: 0, fontFamily: "monospace", textTransform: "uppercase", background: isFailed ? "rgba(255, 0, 60, 0.1)" : "rgba(255, 255, 255, 0.1)", borderColor: isFailed ? "#ff003c" : "#333", color: isFailed ? "#ff003c" : "#fff" }} onClick={function () { onRetry(account.username, step); }} loading={rowBusy === account.username + ":retry:" + step}>
+                <Button key={step} size="small" style={{ borderRadius: 0, fontFamily: "monospace", textTransform: "uppercase", background: isFailed ? "rgba(255, 0, 60, 0.1)" : "rgba(255, 255, 255, 0.1)", borderColor: isFailed ? "#ff003c" : "#333", color: isFailed ? "#ff003c" : "#fff", fontSize: 10, padding: "0 4px" }} onClick={function () { onRetry(account.username, step); }} loading={rowBusy === account.username + ":retry:" + step}>
                   {isFailed ? "RETRY " : "EXEC "}{stepLabel(step)}
                 </Button>
               );
-            }) : <Text style={{ color: "#666", fontFamily: "monospace" }}>[WORKFLOW COMPLETE]</Text>}
+            }) : <Text style={{ color: "#666", fontFamily: "monospace", fontSize: 10 }}>[WORKFLOW COMPLETE]</Text>}
           </Space>
         ) : null}
         <Space wrap>
-          <Button size="small" style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255, 255, 255, 0.05)", borderColor: "#444", color: "#ccc" }} onClick={function () { onRefreshCheckin(account.username); }} loading={rowBusy === account.username + ":refresh-checkin"}>
+          <Button size="small" style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255, 255, 255, 0.05)", borderColor: "#444", color: "#ccc", fontSize: 10, padding: "0 4px" }} onClick={function () { onRefreshCheckin(account.username); }} loading={rowBusy === account.username + ":refresh-checkin"}>
             REFRESH
           </Button>
           {account.checkinStatus && account.checkinStatus.checkedInToday ? (
-            <Tag color="#00ff41" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }}>DONE TODAY</Tag>
+            <Tag color="#00ff41" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0, fontSize: 10, padding: "0 4px" }}>DONE TODAY</Tag>
           ) : (
-            <Button size="small" type="primary" style={{ borderRadius: 0, fontFamily: "monospace", background: "#00ff41", borderColor: "#00ff41", color: "#000", fontWeight: "bold" }} onClick={function () { onManualCheckin(account.username); }} loading={rowBusy === account.username + ":manual-checkin"}>
+            <Button size="small" type="primary" style={{ borderRadius: 0, fontFamily: "monospace", background: "#00ff41", borderColor: "#00ff41", color: "#000", fontWeight: "bold", fontSize: 10, padding: "0 4px" }} onClick={function () { onManualCheckin(account.username); }} loading={rowBusy === account.username + ":manual-checkin"}>
               FORCE CHECK-IN
             </Button>
           )}
           <Popconfirm title="DELETE ACCOUNT?" onConfirm={function() { onDelete(account.username); }} okText="YES" cancelText="NO">
-            <Button size="small" danger style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255,0,0,0.1)", borderColor: "#ff003c" }} loading={rowBusy === account.username + ":delete"}>
+            <Button size="small" danger style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255,0,0,0.1)", borderColor: "#ff003c", fontSize: 10, padding: "0 4px" }} loading={rowBusy === account.username + ":delete"}>
               DEL
             </Button>
           </Popconfirm>
@@ -1105,7 +1105,7 @@ function Dashboard() {
                   columns={columns}
                   pagination={false}
                   size="small"
-                  scroll={{ x: 1600 }}
+                  scroll={{ x: 1080 }}
                   onChange={function (nextPagination) {
                     void loadAccounts(false, nextPagination.current, nextPagination.pageSize, filters);
                   }}

@@ -299,16 +299,23 @@ export async function runBalanceRefresh() {
       console.warn(
         `账号 ${acc.username} 获取余额失败，状态码: ${selfResult.status}`,
       );
-      totalUsedQuota += Number(acc.lastUsedQuota || 0);
       snapshotAccounts.push({
         username: acc.username,
-        quota: Number(acc.lastBalanceQuota || 0),
-        balance: acc.lastBalance || quotaToUsd(acc.lastBalanceQuota || 0),
-        usedQuota: Number(acc.lastUsedQuota || 0),
-        usedBalance: acc.lastUsedBalance || quotaToUsd(acc.lastUsedQuota || 0),
+        quota: 0,
+        balance: "$0.00",
+        usedQuota: 0,
+        usedBalance: "$0.00",
         updatedAt: new Date().toISOString(),
         status: selfResult.status,
         newApiUser: acc.newApiUser || "",
+      });
+      await saveAccountPatch(acc.username, {
+        lastBalanceAt: new Date().toISOString(),
+        lastBalanceQuota: 0,
+        lastBalance: "$0.00",
+        lastUsedQuota: 0,
+        lastUsedBalance: "$0.00",
+        lastBalanceStatus: selfResult.status,
       });
     }
 

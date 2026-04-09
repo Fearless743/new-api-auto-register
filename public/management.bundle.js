@@ -83933,42 +83933,42 @@ function AccountWorkflow({ account }) {
   const hasToken = Boolean(account.token);
   const checkinStatus = account.checkinStatus || {};
   const visibleSteps = getPendingWorkflowSteps(account);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 8, style: { width: "100%" }, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 4, style: { width: "100%" }, children: [
     !hasToken && visibleSteps.map(function(step) {
       const detail = workflow[step] || {};
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 6, style: { width: "100%" }, children: [
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 2, style: { width: "100%" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { style: { justifyContent: "space-between", width: "100%" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { strong: true, style: { color: "#fff", fontFamily: "monospace", textTransform: "uppercase" }, children: stepLabel(step) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { strong: true, style: { color: "#fff", fontFamily: "monospace", textTransform: "uppercase", fontSize: 12 }, children: stepLabel(step) }),
           statusTag(detail.status)
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { style: { color: "#aaa", fontFamily: "monospace", fontSize: 12 }, children: workflowMessage(detail) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { size: 8, wrap: true, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Text2, { style: { color: "#666", fontFamily: "monospace", fontSize: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { style: { color: "#aaa", fontFamily: "monospace", fontSize: 10 }, children: workflowMessage(detail) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { size: 4, wrap: true, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Text2, { style: { color: "#666", fontFamily: "monospace", fontSize: 10 }, children: [
             "[TIME]: ",
             formatTime(detail.lastRunAt)
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Text2, { style: { color: "#666", fontFamily: "monospace", fontSize: 12 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Text2, { style: { color: "#666", fontFamily: "monospace", fontSize: 10 }, children: [
             "[CODE]: ",
             detail.httpStatus == null ? "NULL" : detail.httpStatus
           ] })
         ] })
       ] }) }, step);
     }),
-    hasToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(alert_default, { type: "success", showIcon: false, message: "[SYS] TOKEN AQUIRED. WORKFLOW FOLDED.", style: { background: "rgba(0, 255, 65, 0.1)", border: "1px solid #00ff41", color: "#00ff41", borderRadius: 0, fontFamily: "monospace" } }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 6, style: { width: "100%" }, children: [
+    hasToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(alert_default, { type: "success", showIcon: false, message: "[SYS] TOKEN AQUIRED.", style: { background: "rgba(0, 255, 65, 0.1)", border: "1px solid #00ff41", color: "#00ff41", borderRadius: 0, fontFamily: "monospace", padding: "2px 8px" } }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 2, style: { width: "100%" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { style: { justifyContent: "space-between", width: "100%" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { strong: true, style: { color: "#fff", fontFamily: "monospace" }, children: "[CHECK-IN STATUS]" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { strong: true, style: { color: "#fff", fontFamily: "monospace", fontSize: 12 }, children: "[CHECK-IN]" }),
         checkinTag(checkinStatus)
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[MONTHLY_COUNT]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#fff", fontFamily: "monospace" }, children: checkinStatus.totalCheckins == null ? 0 : checkinStatus.totalCheckins }) }) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[MONTHLY_COUNT]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#fff", fontFamily: "monospace", fontSize: 12 }, children: checkinStatus.totalCheckins == null ? 0 : checkinStatus.totalCheckins }) }) })
     ] }) })
   ] });
 }
 function CredentialsCell({ account }) {
   const hasLocalSession = Boolean(account.session);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[TOKEN]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(typography_default.Paragraph, { copyable: true, ellipsis: { rows: 2, expandable: true, symbol: "\u5C55\u5F00" }, style: { marginBottom: 0, color: "#00ff41", fontFamily: "monospace", fontSize: 12 }, children: account.token || "NULL" }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[SESSION]", children: hasLocalSession ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#00ff41", fontFamily: "monospace" }, children: "EXISTS" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#666", fontFamily: "monospace" }, children: "MISSING" }) })
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[TOKEN]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(typography_default.Paragraph, { copyable: true, ellipsis: { rows: 1, expandable: true, symbol: "\u5C55\u5F00" }, style: { marginBottom: 0, color: "#00ff41", fontFamily: "monospace", fontSize: 12 }, children: account.token || "NULL" }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[SESSION]", children: hasLocalSession ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#00ff41", fontFamily: "monospace", fontSize: 12 }, children: "EXISTS" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#666", fontFamily: "monospace", fontSize: 12 }, children: "MISSING" }) })
   ] }) });
 }
 function BalanceCell({ account }) {
@@ -83976,22 +83976,22 @@ function BalanceCell({ account }) {
   const usedQuota = Number(account.lastUsedQuota) || 0;
   const currentBalanceDisplay = account.lastBalance || quotaToUsd(remainingQuota);
   const usedBalanceDisplay = account.lastUsedBalance || quotaToUsd(usedQuota);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 12, style: { width: "100%" }, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 2, style: { width: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       statistic_default2,
       {
-        title: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#666", fontFamily: "monospace" }, children: "[BALANCE]" }),
+        title: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#666", fontFamily: "monospace", fontSize: 12 }, children: "[BALANCE]" }),
         value: currentBalanceDisplay,
-        valueStyle: { color: "#fff", fontFamily: "monospace", fontWeight: "bold" }
+        valueStyle: { color: "#fff", fontFamily: "monospace", fontWeight: "bold", fontSize: 14 }
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[USED]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace" }, children: usedBalanceDisplay }) }) })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[USED]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace", fontSize: 12 }, children: usedBalanceDisplay }) }) })
   ] }) });
 }
 function AccountCell({ account }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "transparent", border: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 8, style: { width: "100%" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { strong: true, style: { fontSize: 18, fontFamily: "monospace", color: "#fff", letterSpacing: 1 }, children: account.username || "UNKNOWN_USER" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[UPDATED]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace" }, children: formatTime(account.updatedAt) }) }) })
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "transparent", border: "none" }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 2, style: { width: "100%" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { strong: true, style: { fontSize: 14, fontFamily: "monospace", color: "#fff", letterSpacing: 1 }, children: account.username || "UNKNOWN_USER" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[UPDATED]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace", fontSize: 12 }, children: formatTime(account.updatedAt) }) }) })
   ] }) });
 }
 function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDelete, rowBusy }) {
@@ -84000,27 +84000,27 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDel
   const actionableSteps = getPendingWorkflowSteps(account).filter(function(step) {
     return !workflow[step] || workflow[step].status !== "success";
   });
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "transparent", border: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 12, style: { width: "100%" }, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "transparent", border: "none" }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 8, style: { width: "100%" }, children: [
     !hasToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(space_default, { wrap: true, children: actionableSteps.length ? actionableSteps.map(function(step) {
       const detail = workflow[step] || {};
       const isFailed = detail.status === "failed";
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(button_default, { size: "small", style: { borderRadius: 0, fontFamily: "monospace", textTransform: "uppercase", background: isFailed ? "rgba(255, 0, 60, 0.1)" : "rgba(255, 255, 255, 0.1)", borderColor: isFailed ? "#ff003c" : "#333", color: isFailed ? "#ff003c" : "#fff" }, onClick: function() {
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(button_default, { size: "small", style: { borderRadius: 0, fontFamily: "monospace", textTransform: "uppercase", background: isFailed ? "rgba(255, 0, 60, 0.1)" : "rgba(255, 255, 255, 0.1)", borderColor: isFailed ? "#ff003c" : "#333", color: isFailed ? "#ff003c" : "#fff", fontSize: 10, padding: "0 4px" }, onClick: function() {
         onRetry(account.username, step);
       }, loading: rowBusy === account.username + ":retry:" + step, children: [
         isFailed ? "RETRY " : "EXEC ",
         stepLabel(step)
       ] }, step);
-    }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { style: { color: "#666", fontFamily: "monospace" }, children: "[WORKFLOW COMPLETE]" }) }) : null,
+    }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { style: { color: "#666", fontFamily: "monospace", fontSize: 10 }, children: "[WORKFLOW COMPLETE]" }) }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { wrap: true, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", style: { borderRadius: 0, fontFamily: "monospace", background: "rgba(255, 255, 255, 0.05)", borderColor: "#444", color: "#ccc" }, onClick: function() {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", style: { borderRadius: 0, fontFamily: "monospace", background: "rgba(255, 255, 255, 0.05)", borderColor: "#444", color: "#ccc", fontSize: 10, padding: "0 4px" }, onClick: function() {
         onRefreshCheckin(account.username);
       }, loading: rowBusy === account.username + ":refresh-checkin", children: "REFRESH" }),
-      account.checkinStatus && account.checkinStatus.checkedInToday ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "#00ff41", style: { color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }, children: "DONE TODAY" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", type: "primary", style: { borderRadius: 0, fontFamily: "monospace", background: "#00ff41", borderColor: "#00ff41", color: "#000", fontWeight: "bold" }, onClick: function() {
+      account.checkinStatus && account.checkinStatus.checkedInToday ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "#00ff41", style: { color: "#000", border: "none", fontWeight: "bold", borderRadius: 0, fontSize: 10, padding: "0 4px" }, children: "DONE TODAY" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", type: "primary", style: { borderRadius: 0, fontFamily: "monospace", background: "#00ff41", borderColor: "#00ff41", color: "#000", fontWeight: "bold", fontSize: 10, padding: "0 4px" }, onClick: function() {
         onManualCheckin(account.username);
       }, loading: rowBusy === account.username + ":manual-checkin", children: "FORCE CHECK-IN" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(popconfirm_default, { title: "DELETE ACCOUNT?", onConfirm: function() {
         onDelete(account.username);
-      }, okText: "YES", cancelText: "NO", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", danger: true, style: { borderRadius: 0, fontFamily: "monospace", background: "rgba(255,0,0,0.1)", borderColor: "#ff003c" }, loading: rowBusy === account.username + ":delete", children: "DEL" }) })
+      }, okText: "YES", cancelText: "NO", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", danger: true, style: { borderRadius: 0, fontFamily: "monospace", background: "rgba(255,0,0,0.1)", borderColor: "#ff003c", fontSize: 10, padding: "0 4px" }, loading: rowBusy === account.username + ":delete", children: "DEL" }) })
     ] })
   ] }) });
 }
@@ -84036,7 +84036,7 @@ function Dashboard() {
   const [registerTask, setRegisterTask] = (0, import_react146.useState)(null);
   const [selectedRowKeys, setSelectedRowKeys] = (0, import_react146.useState)([]);
   const [registerCount, setRegisterCount] = (0, import_react146.useState)(5);
-  const [pagination, setPagination] = (0, import_react146.useState)({ current: 1, pageSize: 20, total: 0 });
+  const [pagination, setPagination] = (0, import_react146.useState)({ current: 1, pageSize: 1e4, total: 0 });
   const [filters, setFilters] = (0, import_react146.useState)({
     keyword: "",
     statusMode: "all",
@@ -84089,7 +84089,7 @@ function Dashboard() {
   }, [selectedAccounts]);
   async function loadAccounts(silent, nextPage, nextPageSize, nextFilters) {
     const page = nextPage || pagination.current;
-    const pageSize = nextPageSize || pagination.pageSize;
+    const pageSize = 1e4;
     const activeFilters = nextFilters || filters;
     if (!silent) setLoading(true);
     try {
@@ -84400,7 +84400,7 @@ function Dashboard() {
       title: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace" }, children: "[ID]" }),
       dataIndex: "username",
       key: "account",
-      width: 240,
+      width: 160,
       render: function(_, record) {
         return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AccountCell, { account: record });
       }
@@ -84409,7 +84409,7 @@ function Dashboard() {
       title: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace" }, children: "[WORKFLOW_STATE]" }),
       dataIndex: "workflow",
       key: "workflow",
-      width: 380,
+      width: 280,
       render: function(_, record) {
         return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AccountWorkflow, { account: record });
       }
@@ -84418,7 +84418,7 @@ function Dashboard() {
       title: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace" }, children: "[CREDENTIALS]" }),
       dataIndex: "token",
       key: "credentials",
-      width: 320,
+      width: 240,
       render: function(_, record) {
         return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CredentialsCell, { account: record });
       }
@@ -84427,7 +84427,7 @@ function Dashboard() {
       title: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace" }, children: "[FUNDS]" }),
       dataIndex: "balance",
       key: "balance",
-      width: 280,
+      width: 200,
       render: function(_, record) {
         return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BalanceCell, { account: record });
       }
@@ -84436,7 +84436,7 @@ function Dashboard() {
       title: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace" }, children: "[EXECUTE]" }),
       dataIndex: "actions",
       key: "actions",
-      width: 260,
+      width: 200,
       render: function(_, record) {
         return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           ActionCell,
@@ -84613,16 +84613,9 @@ function Dashboard() {
             rowKey: "username",
             dataSource: accounts,
             columns,
-            pagination: {
-              current: pagination.current,
-              pageSize: pagination.pageSize,
-              total: pagination.total,
-              showSizeChanger: true,
-              showTotal: function(total) {
-                return "\u5171 " + total + " \u6761";
-              }
-            },
-            scroll: { x: 1600 },
+            pagination: false,
+            size: "small",
+            scroll: { x: 1080 },
             onChange: function(nextPagination) {
               void loadAccounts(false, nextPagination.current, nextPagination.pageSize, filters);
             },
