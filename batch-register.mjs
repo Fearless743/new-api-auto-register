@@ -1071,7 +1071,7 @@ export async function runBatchRegister(inputCount) {
     let tokenFromList = "";
     
     // 如果没有拿到真实的 tokenValue，则 fallback 到 token list 方法
-    if (!finalTokenValue) {
+    if (!finalTokenValue || finalTokenValue.includes("***")) {
       tokenListResult = await listTokensOne(loginResult);
       tokenFromList = tokenListResult.ok
         ? extractTokenFromList(
@@ -1079,7 +1079,20 @@ export async function runBatchRegister(inputCount) {
             tokenCreateResult.tokenName,
           )
         : "";
-      finalTokenValue = `sk-${tokenCreateResult.tokenValue || tokenFromList}`;
+      
+      const potentialToken = tokenCreateResult.tokenValue || tokenFromList;
+      if (potentialToken && potentialToken.includes("***") && tokenCreateResult.tokenId) {
+        // Fallback to fetch key directly if we only got truncated token
+        const keyResult = await createTokenByIdOne(loginResult, tokenCreateResult.tokenId);
+        if (keyResult.ok && keyResult.tokenValue) {
+           finalTokenValue = `sk-${keyResult.tokenValue}`;
+           tokenListResult = { ok: true, status: 200 };
+        } else {
+           finalTokenValue = `sk-${potentialToken}`;
+        }
+      } else {
+        finalTokenValue = `sk-${potentialToken}`;
+      }
     } else {
       finalTokenValue = `sk-${finalTokenValue}`;
       // 构造一个成功状态供下面记录 workflow 使用
@@ -1236,7 +1249,7 @@ export async function retryAccountWorkflow(username, step) {
     let tokenListResult = null;
     let tokenFromList = "";
     
-    if (!finalTokenValue) {
+    if (!finalTokenValue || finalTokenValue.includes("***")) {
       tokenListResult = await listTokensOne(loginResult);
       tokenFromList = tokenListResult.ok
         ? extractTokenFromList(
@@ -1244,9 +1257,22 @@ export async function retryAccountWorkflow(username, step) {
             tokenCreateResult.tokenName,
           )
         : "";
-      finalTokenValue = tokenCreateResult.ok
-        ? `sk-${tokenCreateResult.tokenValue || tokenFromList}`
-        : account.token;
+      
+      const potentialToken = tokenCreateResult.tokenValue || tokenFromList;
+      if (potentialToken && potentialToken.includes("***") && tokenCreateResult.tokenId) {
+        // Fallback to fetch key directly if we only got truncated token
+        const keyResult = await createTokenByIdOne(loginResult, tokenCreateResult.tokenId);
+        if (keyResult.ok && keyResult.tokenValue) {
+           finalTokenValue = `sk-${keyResult.tokenValue}`;
+           tokenListResult = { ok: true, status: 200 };
+        } else {
+           finalTokenValue = account.token && !account.token.includes("***") ? account.token : `sk-${potentialToken}`;
+        }
+      } else {
+        finalTokenValue = tokenCreateResult.ok
+          ? `sk-${potentialToken}`
+          : account.token;
+      }
     } else {
       finalTokenValue = `sk-${finalTokenValue}`;
       tokenListResult = { ok: true, status: 200 };
