@@ -37,6 +37,7 @@ function stepLabel(step) {
     login: "登录",
     tokenCreate: "创建 Token",
     tokenList: "查询 Token",
+    tokenRefresh: "重新获取 Token",
     checkin: "签到",
   }[step] || step;
 }
@@ -1064,6 +1065,7 @@ function Dashboard() {
                     { value: "login", label: "登录" },
                     { value: "tokenCreate", label: "创建 Token" },
                     { value: "tokenList", label: "查询 Token" },
+                    { value: "tokenRefresh", label: "重新获取 Token" },
                     { value: "checkin", label: "签到" },
                   ]}
                   onChange={function (value) {
