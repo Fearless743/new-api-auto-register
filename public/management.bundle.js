@@ -83791,13 +83791,6 @@ async function request(path, options) {
   }
   return data;
 }
-async function requestCheckinStatus(username) {
-  return request(apiBase + "/accounts/" + encodeURIComponent(username) + "/checkin-status", {
-    method: "POST",
-    headers: Object.assign({ "Content-Type": "application/json" }, adminHeaders()),
-    body: JSON.stringify({})
-  });
-}
 async function requestExportTokens() {
   const res = await fetch(apiBase + "/tokens/export", {
     method: "GET",
@@ -84007,7 +84000,7 @@ function AccountCell({ account }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[UPDATED]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#888", fontFamily: "monospace", fontSize: 12 }, children: formatTime(account.updatedAt) }) }) })
   ] }) });
 }
-function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDelete, rowBusy }) {
+function ActionCell({ account, onRetry, onRefreshBalance, onDelete, rowBusy }) {
   const workflow = account.workflow || {};
   const hasToken = Boolean(account.token);
   const actionableSteps = getPendingWorkflowSteps(account).filter(function(step) {
@@ -84029,11 +84022,8 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDel
     }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { style: { color: "#666", fontFamily: "monospace", fontSize: 10 }, children: "[WORKFLOW COMPLETE]" }) }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { wrap: true, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", style: { borderRadius: 0, fontFamily: "monospace", background: "rgba(255, 255, 255, 0.05)", borderColor: "#444", color: "#ccc", fontSize: 10, padding: "0 4px" }, onClick: function() {
-        onRefreshCheckin(account.username);
-      }, loading: rowBusy === account.username + ":refresh-checkin", children: "REFRESH" }),
-      account.checkinStatus && account.checkinStatus.checkedInToday ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "#00ff41", style: { color: "#000", border: "none", fontWeight: "bold", borderRadius: 0, fontSize: 10, padding: "0 4px" }, children: "DONE TODAY" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", type: "primary", style: { borderRadius: 0, fontFamily: "monospace", background: "#00ff41", borderColor: "#00ff41", color: "#000", fontWeight: "bold", fontSize: 10, padding: "0 4px" }, onClick: function() {
-        onManualCheckin(account.username);
-      }, loading: rowBusy === account.username + ":manual-checkin", children: "FORCE CHECK-IN" }),
+        onRefreshBalance(account.username);
+      }, loading: rowBusy === account.username + ":refresh-balance", children: "REFRESH BALANCE" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(popconfirm_default, { title: "DELETE ACCOUNT?", onConfirm: function() {
         onDelete(account.username);
       }, okText: "YES", cancelText: "NO", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { size: "small", danger: true, style: { borderRadius: 0, fontFamily: "monospace", background: "rgba(255,0,0,0.1)", borderColor: "#ff003c", fontSize: 10, padding: "0 4px" }, loading: rowBusy === account.username + ":delete", children: "DEL" }) })
@@ -84244,28 +84234,15 @@ function Dashboard() {
       setBusyKey("");
     }
   }
-  async function handleRefreshCheckin(username) {
-    const key = username + ":refresh-checkin";
+  async function handleRefreshBalance(username) {
+    const key = username + ":refresh-balance";
     setBusyKey(key);
     try {
-      await requestCheckinStatus(username);
-      message.success(username + " \u7684\u7B7E\u5230\u72B6\u6001\u5DF2\u5237\u65B0");
-      await loadAccounts(true, pagination.current, pagination.pageSize, filters);
-    } catch (error) {
-      message.error(error.message);
-    } finally {
-      setBusyKey("");
-    }
-  }
-  async function handleManualCheckin(username) {
-    const key = username + ":manual-checkin";
-    setBusyKey(key);
-    try {
-      await request(apiBase + "/accounts/" + encodeURIComponent(username) + "/checkin", {
+      await request(apiBase + "/accounts/" + encodeURIComponent(username) + "/balance", {
         method: "POST",
         headers: adminHeaders()
       });
-      message.success(username + " \u5DF2\u6267\u884C\u7B7E\u5230");
+      message.success(username + " \u7684\u4F59\u989D\u72B6\u6001\u5DF2\u5237\u65B0");
       await loadAccounts(true, pagination.current, pagination.pageSize, filters);
     } catch (error) {
       message.error(error.message);
@@ -84289,49 +84266,32 @@ function Dashboard() {
       setBusyKey("");
     }
   }
-  async function refreshCheckinStatuses(accounts2, options) {
+  async function refreshBalanceStatuses(accounts2, options) {
     if (!accounts2.length) {
-      message.info("\u5F53\u524D\u7B5B\u9009\u7ED3\u679C\u91CC\u6CA1\u6709\u8D26\u53F7\u53EF\u5237\u65B0\u7B7E\u5230\u72B6\u6001");
+      message.info("\u5F53\u524D\u7B5B\u9009\u7ED3\u679C\u91CC\u6CA1\u6709\u8D26\u53F7\u53EF\u5237\u65B0\u4F59\u989D\u72B6\u6001");
       return;
     }
-    setBusyKey("refresh-checkin-visible");
+    setBusyKey("refresh-balance-visible");
     let successCount = 0;
     let failedCount = 0;
     for (let index = 0; index < accounts2.length; index += 1) {
       try {
-        await requestCheckinStatus(accounts2[index].username);
+        await request(apiBase + "/accounts/" + encodeURIComponent(accounts2[index].username) + "/balance", {
+          method: "POST",
+          headers: adminHeaders()
+        });
         successCount += 1;
       } catch {
         failedCount += 1;
       }
     }
     if (!(options && options.skipDoneMessage)) {
-      message.success("\u7B7E\u5230\u72B6\u6001\u5237\u65B0\u5B8C\u6210\uFF1A\u6210\u529F " + successCount + "\uFF0C\u5931\u8D25 " + failedCount);
+      message.success("\u4F59\u989D\u72B6\u6001\u5237\u65B0\u5B8C\u6210\uFF1A\u6210\u529F " + successCount + "\uFF0C\u5931\u8D25 " + failedCount);
     }
     if (!(options && options.skipReload)) {
       await loadAccounts(true, pagination.current, pagination.pageSize, filters);
     }
     setBusyKey("");
-  }
-  async function checkinMany(accounts2) {
-    setBusyKey("checkin-many");
-    try {
-      const data = await request(apiBase + "/checkins", {
-        method: "POST",
-        headers: adminHeaders()
-      });
-      if (data.alreadyRunning) {
-        message.info("\u6279\u91CF\u7B7E\u5230\u4EFB\u52A1\u5DF2\u5728\u540E\u53F0\u8FD0\u884C\u4E2D");
-      } else {
-        message.success("\u6279\u91CF\u7B7E\u5230\u4EFB\u52A1\u5DF2\u542F\u52A8\uFF0C\u540E\u53F0\u5904\u7406\u4E2D");
-      }
-      setCheckinTask(data || null);
-      await loadAccounts(true, pagination.current, pagination.pageSize, filters);
-    } catch (error) {
-      message.error(error.message);
-    } finally {
-      setBusyKey("");
-    }
   }
   async function retryMany(actions) {
     if (!actions.length) {
@@ -84381,21 +84341,42 @@ function Dashboard() {
   async function handleExportTokens() {
     setBusyKey("export-tokens");
     try {
-      const tokens = await requestExportTokens();
-      if (!tokens) {
+      const groups = await requestExportTokens();
+      if (!groups || Object.keys(groups).length === 0) {
         message.warning("\u6CA1\u6709\u627E\u5230 Token");
         return;
       }
-      const blob = new Blob([tokens], { type: "text/plain;charset=utf-8" });
-      const url2 = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url2;
-      link.download = "tokens.txt";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url2);
-      message.success("Token \u5DF2\u5BFC\u51FA\u5E76\u4E0B\u8F7D");
+      const urls = Object.keys(groups);
+      if (urls.length === 1) {
+        const tokens = groups[urls[0]];
+        const blob = new Blob([tokens.join("\n")], { type: "text/plain;charset=utf-8" });
+        const url2 = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url2;
+        link.download = `tokens.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url2);
+        message.success("Token \u5DF2\u5BFC\u51FA\u5E76\u4E0B\u8F7D");
+      } else {
+        for (let i = 0; i < urls.length; i++) {
+          const u = urls[i];
+          const tokens = groups[u];
+          const blob = new Blob([tokens.join("\n")], { type: "text/plain;charset=utf-8" });
+          const url2 = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url2;
+          const safeName = u.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+          link.download = `tokens_${safeName}.txt`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url2);
+          await new Promise((r2) => setTimeout(r2, 200));
+        }
+        message.success(`Token \u5DF2\u5206\u4E3A ${urls.length} \u4E2A\u6587\u4EF6\u5BFC\u51FA\u5E76\u4E0B\u8F7D`);
+      }
     } catch (error) {
       message.error(error.message);
     } finally {
@@ -84470,8 +84451,7 @@ function Dashboard() {
           {
             account: record,
             onRetry: handleRetry,
-            onRefreshCheckin: handleRefreshCheckin,
-            onManualCheckin: handleManualCheckin,
+            onRefreshBalance: handleRefreshBalance,
             onDelete: handleDelete,
             rowBusy: busyKey
           }
@@ -84593,22 +84573,10 @@ function Dashboard() {
             }
           ),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(button_default, { onClick: function() {
-            void refreshCheckinStatuses(accounts);
-          }, loading: busyKey === "refresh-checkin-visible", children: [
-            "\u5237\u65B0\u5F53\u524D\u9875\u7B7E\u5230\u72B6\u6001",
+            void refreshBalanceStatuses(accounts);
+          }, loading: busyKey === "refresh-balance-visible", children: [
+            "\u5237\u65B0\u5F53\u524D\u9875\u4F59\u989D\u72B6\u6001",
             accounts.length ? " (" + accounts.length + ")" : ""
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(button_default, { onClick: function() {
-            void checkinMany(accounts);
-          }, disabled: visibleNeedCheckin === 0, loading: busyKey === "checkin-many", children: [
-            "\u4E3A\u5F53\u524D\u9875\u672A\u7B7E\u5230\u8D26\u53F7\u7B7E\u5230",
-            visibleNeedCheckin ? " (" + visibleNeedCheckin + ")" : ""
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(button_default, { onClick: function() {
-            void checkinMany(selectedAccounts);
-          }, disabled: selectedNeedCheckin === 0, loading: busyKey === "checkin-many", children: [
-            "\u4E3A\u6240\u9009\u672A\u7B7E\u5230\u8D26\u53F7\u7B7E\u5230",
-            selectedNeedCheckin ? " (" + selectedNeedCheckin + ")" : ""
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(button_default, { onClick: function() {
             setSelectedRowKeys(accounts.map(function(account) {

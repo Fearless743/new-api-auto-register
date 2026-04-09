@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 import "./env-bootstrap.mjs";
-import { listUniqueTokens, readStore } from "./storage.mjs";
+import { readStore } from "./storage.mjs";
 
 const CONFIG = {
   tokenTxtPath: process.env.TOKEN_TXT_PATH || "./tokens.txt",
   tokenCsvPath: process.env.TOKEN_CSV_PATH || "./tokens.csv",
   storePath: process.env.STORE_PATH || "./data/store.json",
   existingTokens: process.env.MANAGEMENT_EXISTING_TOKENS || "",
+  baseUrl: process.env.BASE_URL || "",
 };
 
 async function readTokensFromTxt(filePath) {
@@ -54,10 +55,6 @@ async function readTokensFromCsv(filePath) {
   }
 }
 
-function uniqueTokens(tokens) {
-  return Array.from(new Set(tokens));
-}
-
 function parseTokenList(raw) {
   return String(raw)
     .split(",")
@@ -66,11 +63,40 @@ function parseTokenList(raw) {
 }
 
 export async function runExportTokens() {
-  const txtTokens = await readTokensFromTxt(CONFIG.tokenTxtPath);
-  const csvTokens = await readTokensFromCsv(CONFIG.tokenCsvPath);
+  const groups = {};
+
+  function addToken(url, token) {
+    if (!token || !token.startsWith("sk-")) return;
+    const key = url || "default";
+    if (!groups[key]) {
+      groups[key] = new Set();
+    }
+    groups[key].add(token);
+  }
+
+  // 1. Store
   const store = await readStore(CONFIG.storePath).catch(() => ({ accounts: [] }));
-  const storeTokens = listUniqueTokens(store);
-  const existingTokens = parseTokenList(CONFIG.existingTokens);
+  for (const acc of store.accounts) {
+    addToken(acc.baseUrl || CONFIG.baseUrl, acc.token);
+  }
+
+  // 2. Txt & CSV & Existing Tokens (assumed to belong to default/global config)
+  const defaultUrl = CONFIG.baseUrl || "default";
   
-  return uniqueTokens([...existingTokens, ...storeTokens, ...txtTokens, ...csvTokens]);
+  const txtTokens = await readTokensFromTxt(CONFIG.tokenTxtPath);
+  for (const t of txtTokens) addToken(defaultUrl, t);
+
+  const csvTokens = await readTokensFromCsv(CONFIG.tokenCsvPath);
+  for (const t of csvTokens) addToken(defaultUrl, t);
+
+  const existingTokens = parseTokenList(CONFIG.existingTokens);
+  for (const t of existingTokens) addToken(defaultUrl, t);
+
+  // Convert Set to Array
+  const result = {};
+  for (const [url, tokensSet] of Object.entries(groups)) {
+    result[url] = Array.from(tokensSet);
+  }
+
+  return result;
 }

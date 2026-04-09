@@ -388,7 +388,7 @@ function AccountCell({ account }) {
   );
 }
 
-function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDelete, rowBusy }) {
+function ActionCell({ account, onRetry, onRefreshBalance, onDelete, rowBusy }) {
   const workflow = account.workflow || {};
   const hasToken = Boolean(account.token);
   const actionableSteps = getPendingWorkflowSteps(account).filter(function (step) {
@@ -415,16 +415,9 @@ function ActionCell({ account, onRetry, onRefreshCheckin, onManualCheckin, onDel
           </Space>
         ) : null}
         <Space wrap>
-          <Button size="small" style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255, 255, 255, 0.05)", borderColor: "#444", color: "#ccc", fontSize: 10, padding: "0 4px" }} onClick={function () { onRefreshCheckin(account.username); }} loading={rowBusy === account.username + ":refresh-checkin"}>
-            REFRESH
+          <Button size="small" style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255, 255, 255, 0.05)", borderColor: "#444", color: "#ccc", fontSize: 10, padding: "0 4px" }} onClick={function () { onRefreshBalance(account.username); }} loading={rowBusy === account.username + ":refresh-balance"}>
+            REFRESH BALANCE
           </Button>
-          {account.checkinStatus && account.checkinStatus.checkedInToday ? (
-            <Tag color="#00ff41" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0, fontSize: 10, padding: "0 4px" }}>DONE TODAY</Tag>
-          ) : (
-            <Button size="small" type="primary" style={{ borderRadius: 0, fontFamily: "monospace", background: "#00ff41", borderColor: "#00ff41", color: "#000", fontWeight: "bold", fontSize: 10, padding: "0 4px" }} onClick={function () { onManualCheckin(account.username); }} loading={rowBusy === account.username + ":manual-checkin"}>
-              FORCE CHECK-IN
-            </Button>
-          )}
           <Popconfirm title="DELETE ACCOUNT?" onConfirm={function() { onDelete(account.username); }} okText="YES" cancelText="NO">
             <Button size="small" danger style={{ borderRadius: 0, fontFamily: "monospace", background: "rgba(255,0,0,0.1)", borderColor: "#ff003c", fontSize: 10, padding: "0 4px" }} loading={rowBusy === account.username + ":delete"}>
               DEL
@@ -712,29 +705,15 @@ function Dashboard() {
     }
   }
 
-  async function handleRefreshCheckin(username) {
-    const key = username + ":refresh-checkin";
+  async function handleRefreshBalance(username) {
+    const key = username + ":refresh-balance";
     setBusyKey(key);
     try {
-      await requestCheckinStatus(username);
-      message.success(username + " 的签到状态已刷新");
-      await loadAccounts(true, pagination.current, pagination.pageSize, filters);
-    } catch (error) {
-      message.error(error.message);
-    } finally {
-      setBusyKey("");
-    }
-  }
-
-  async function handleManualCheckin(username) {
-    const key = username + ":manual-checkin";
-    setBusyKey(key);
-    try {
-      await request(apiBase + "/accounts/" + encodeURIComponent(username) + "/checkin", {
+      await request(apiBase + "/accounts/" + encodeURIComponent(username) + "/balance", {
         method: "POST",
         headers: adminHeaders(),
       });
-      message.success(username + " 已执行签到");
+      message.success(username + " 的余额状态已刷新");
       await loadAccounts(true, pagination.current, pagination.pageSize, filters);
     } catch (error) {
       message.error(error.message);
@@ -760,19 +739,22 @@ function Dashboard() {
     }
   }
 
-  async function refreshCheckinStatuses(accounts, options) {
+  async function refreshBalanceStatuses(accounts, options) {
     if (!accounts.length) {
-      message.info("当前筛选结果里没有账号可刷新签到状态");
+      message.info("当前筛选结果里没有账号可刷新余额状态");
       return;
     }
 
-    setBusyKey("refresh-checkin-visible");
+    setBusyKey("refresh-balance-visible");
     let successCount = 0;
     let failedCount = 0;
 
     for (let index = 0; index < accounts.length; index += 1) {
       try {
-        await requestCheckinStatus(accounts[index].username);
+        await request(apiBase + "/accounts/" + encodeURIComponent(accounts[index].username) + "/balance", {
+          method: "POST",
+          headers: adminHeaders(),
+        });
         successCount += 1;
       } catch {
         failedCount += 1;
@@ -780,33 +762,12 @@ function Dashboard() {
     }
 
     if (!(options && options.skipDoneMessage)) {
-      message.success("签到状态刷新完成：成功 " + successCount + "，失败 " + failedCount);
+      message.success("余额状态刷新完成：成功 " + successCount + "，失败 " + failedCount);
     }
     if (!(options && options.skipReload)) {
       await loadAccounts(true, pagination.current, pagination.pageSize, filters);
     }
     setBusyKey("");
-  }
-
-  async function checkinMany(accounts) {
-    setBusyKey("checkin-many");
-    try {
-      const data = await request(apiBase + "/checkins", {
-        method: "POST",
-        headers: adminHeaders(),
-      });
-      if (data.alreadyRunning) {
-        message.info("批量签到任务已在后台运行中");
-      } else {
-        message.success("批量签到任务已启动，后台处理中");
-      }
-      setCheckinTask(data || null);
-      await loadAccounts(true, pagination.current, pagination.pageSize, filters);
-    } catch (error) {
-      message.error(error.message);
-    } finally {
-      setBusyKey("");
-    }
   }
 
   async function retryMany(actions) {
@@ -862,21 +823,49 @@ function Dashboard() {
   async function handleExportTokens() {
     setBusyKey("export-tokens");
     try {
-      const tokens = await requestExportTokens();
-      if (!tokens) {
+      const groups = await requestExportTokens();
+      if (!groups || Object.keys(groups).length === 0) {
         message.warning("没有找到 Token");
         return;
       }
-      const blob = new Blob([tokens], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "tokens.txt";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      message.success("Token 已导出并下载");
+
+      // We have multiple urls. Generate multiple files using a zip, or if it's just one URL, a single txt file.
+      const urls = Object.keys(groups);
+      if (urls.length === 1) {
+        const tokens = groups[urls[0]];
+        const blob = new Blob([tokens.join("\n")], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `tokens.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        message.success("Token 已导出并下载");
+      } else {
+        // Simple client side zip is not available easily without a library like JSZip.
+        // As a workaround for a single HTML file bundle without importing huge dependencies,
+        // we can download them one by one.
+        for (let i = 0; i < urls.length; i++) {
+          const u = urls[i];
+          const tokens = groups[u];
+          const blob = new Blob([tokens.join("\n")], { type: "text/plain;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          // Clean up url to make it a safe filename
+          const safeName = u.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+          link.download = `tokens_${safeName}.txt`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          // Small delay to allow browser to trigger download
+          await new Promise(r => setTimeout(r, 200));
+        }
+        message.success(`Token 已分为 ${urls.length} 个文件导出并下载`);
+      }
     } catch (error) {
       message.error(error.message);
     } finally {
@@ -949,14 +938,13 @@ function Dashboard() {
       width: 200,
       render: function (_, record) {
         return (
-          <ActionCell
-            account={record}
-            onRetry={handleRetry}
-            onRefreshCheckin={handleRefreshCheckin}
-            onManualCheckin={handleManualCheckin}
-            onDelete={handleDelete}
-            rowBusy={busyKey}
-          />
+            <ActionCell
+              account={record}
+              onRetry={handleRetry}
+              onRefreshBalance={handleRefreshBalance}
+              onDelete={handleDelete}
+              rowBusy={busyKey}
+            />
         );
       },
     },
@@ -1097,14 +1085,8 @@ function Dashboard() {
                     setFilters(Object.assign({}, filters, { step: value }));
                   }}
                 />
-                <Button onClick={function () { void refreshCheckinStatuses(accounts); }} loading={busyKey === "refresh-checkin-visible"}>
-                  刷新当前页签到状态{accounts.length ? " (" + accounts.length + ")" : ""}
-                </Button>
-                <Button onClick={function () { void checkinMany(accounts); }} disabled={visibleNeedCheckin === 0} loading={busyKey === "checkin-many"}>
-                  为当前页未签到账号签到{visibleNeedCheckin ? " (" + visibleNeedCheckin + ")" : ""}
-                </Button>
-                <Button onClick={function () { void checkinMany(selectedAccounts); }} disabled={selectedNeedCheckin === 0} loading={busyKey === "checkin-many"}>
-                  为所选未签到账号签到{selectedNeedCheckin ? " (" + selectedNeedCheckin + ")" : ""}
+                <Button onClick={function () { void refreshBalanceStatuses(accounts); }} loading={busyKey === "refresh-balance-visible"}>
+                  刷新当前页余额状态{accounts.length ? " (" + accounts.length + ")" : ""}
                 </Button>
                 <Button onClick={function () {
                   setSelectedRowKeys(accounts.map(function (account) { return account.username; }));

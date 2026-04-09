@@ -858,6 +858,28 @@ async function handleRequest(req, res) {
   }
 
   if (
+    req.method === "POST" &&
+    url.pathname.startsWith(buildPath("/accounts/")) &&
+    url.pathname.endsWith("/balance")
+  ) {
+    if (!requireAdminKey(req, res)) {
+      return;
+    }
+
+    const base = buildPath("/accounts/").length;
+    const username = decodeURIComponent(url.pathname.slice(base, -"/balance".length));
+
+    try {
+      await runBalanceRefresh(username);
+      const store = await readStore(CONFIG.storePath);
+      const account = store.accounts.find((a) => a.username === username);
+      return json(res, 200, { ok: true, account: serializeAccount(account) });
+    } catch (error) {
+      return json(res, 400, { error: error?.message || "Balance refresh failed" });
+    }
+  }
+
+  if (
     req.method === "DELETE" &&
     url.pathname.startsWith(buildPath("/accounts/"))
   ) {
