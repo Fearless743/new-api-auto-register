@@ -24,7 +24,6 @@ const CONFIG = {
     process.env.CHECKIN_CRON_TZ ||
     "Asia/Shanghai",
   checkinCronExpr: process.env.CHECKIN_CRON_EXPR || "0 0 * * *",
-  checkinMonitorCronExpr: process.env.CHECKIN_MONITOR_CRON_EXPR || "*/30 * * * *",
   checkinCronTz: process.env.CHECKIN_CRON_TZ || "Asia/Shanghai",
   runCheckinOnStart:
     String(process.env.CHECKIN_RUN_ON_START || "false").toLowerCase() === "true",
@@ -102,22 +101,6 @@ function filterAccounts(accounts, filters) {
     }
 
     const workflow = account.workflow || {};
-    const checkinStatus = account.checkinStatus || {};
-    const checkinFailed = account.lastCheckin && account.lastCheckin.success === false;
-    const checkinIdle = !checkinStatus.updatedAt;
-    const checkinSuccess = checkinStatus.checkedInToday === true;
-    const checkinPending = checkinStatus.updatedAt && checkinStatus.checkedInToday === false;
-
-    if (statusMode === "unchecked-only") {
-      return Boolean(checkinPending);
-    }
-
-    if (selectedStep === "checkin") {
-      if (statusMode === "failed-only") return checkinFailed || checkinStatus.checkedInToday === false;
-      if (statusMode === "success-only") return checkinSuccess;
-      if (statusMode === "idle-only") return checkinIdle;
-      return true;
-    }
 
     const steps = selectedStep === "all" ? workflowSteps : [selectedStep];
     const hasFailed = steps.some((step) => workflow[step] && workflow[step].status === "failed");
@@ -157,13 +140,9 @@ function buildAccountsSummary(accounts, filteredAccounts) {
       failed,
       success,
       updated,
-      checkinDone: accounts.filter((account) => account.checkinStatus && account.checkinStatus.checkedInToday === true).length,
-      checkinPending: accounts.filter((account) => !(account.checkinStatus && account.checkinStatus.checkedInToday) && account.checkinStatus && account.checkinStatus.updatedAt).length,
-      checkinUnknown: accounts.filter((account) => !(account.checkinStatus && account.checkinStatus.updatedAt)).length,
     },
     filtered: {
       total: filteredAccounts.length,
-      pendingCheckin: filteredAccounts.filter((account) => !(account.checkinStatus && account.checkinStatus.checkedInToday)).length,
     },
   };
 }
@@ -338,7 +317,10 @@ function runBalanceSafely(reason) {
   balanceLastError = "";
   console.log(`[service] start status refresh (${reason})`);
   void (async () => {
-    await runBalanceRefresh();
+    // 移除自动刷新额度，改为用户手动触发，或保留？需求是：获取账户余额需要去管理后台点击对应账号的获取余额才获取对应账号的余额。
+    // 但是这里是 batch status refresh，如果是管理后台单独获取，应该在单独的 API 里。
+    // 先注释掉自动跑所有账号额度
+    // await runBalanceRefresh();
     await runCheckinStatusRefresh();
   })()
     .then(() => {
@@ -365,26 +347,6 @@ function runBalanceSafely(reason) {
   };
 }
 
-async function ensureCheckinForPendingAccounts(reason) {
-  try {
-    const store = await readStore(CONFIG.storePath);
-    const pendingAccounts = store.accounts.filter((account) => {
-      return !(account.checkinStatus && account.checkinStatus.checkedInToday === true);
-    });
-
-    if (!pendingAccounts.length) {
-      console.log(`[service] skip checkin monitor (${reason}), all accounts already checked in`);
-      return;
-    }
-
-    console.log(
-      `[service] checkin monitor (${reason}) found ${pendingAccounts.length} pending account(s), starting background checkin`,
-    );
-    runCheckinSafely(`monitor:${reason}`);
-  } catch (error) {
-    console.error(`[service] checkin monitor failed (${reason}):`, error);
-  }
-}
 
 function getRegisterStatusBody() {
   return {
@@ -803,6 +765,20 @@ async function handleRequest(req, res) {
     return json(res, result.statusCode, result.body);
   }
 
+  if (req.method === "GET" && url.pathname === buildPath("/tokens/export")) {
+    if (!requireAdminKey(req, res)) {
+      return;
+    }
+
+    try {
+      const tokens = await runExportTokens();
+      return text(res, 200, tokens.join("\n"), "text/plain; charset=utf-8");
+    } catch (error) {
+      console.error("[service] token export failed:", error);
+      return json(res, 500, { error: error?.message || "Token export failed" });
+    }
+  }
+
   if (
     req.method === "POST" &&
     url.pathname.startsWith(buildPath("/accounts/")) &&
@@ -919,14 +895,6 @@ async function main() {
   );
 
   cron.schedule(
-    CONFIG.checkinMonitorCronExpr,
-    () => {
-      void ensureCheckinForPendingAccounts("monitor");
-    },
-    { timezone: CONFIG.checkinCronTz },
-  );
-
-  cron.schedule(
     CONFIG.balanceCronExpr,
     () => {
       void runBalanceSafely("scheduled");
@@ -934,9 +902,6 @@ async function main() {
     { timezone: CONFIG.balanceCronTz },
   );
 
-  if (CONFIG.runCheckinOnStart) {
-    void runCheckinSafely("startup");
-  }
   if (CONFIG.runBalanceOnStart) {
     void runBalanceSafely("startup");
   }
@@ -951,7 +916,7 @@ async function main() {
   server.listen(CONFIG.apiPort, API_HOST, () => {
     console.log(`[service] listening on http://${API_HOST}:${CONFIG.apiPort}${API_PREFIX}`);
     console.log(
-      `[service] checkin cron='${CONFIG.checkinCronExpr}' monitor='${CONFIG.checkinMonitorCronExpr}' tz='${CONFIG.checkinCronTz}', status cron='${CONFIG.balanceCronExpr}' tz='${CONFIG.balanceCronTz}'`,
+      `[service] checkin cron='${CONFIG.checkinCronExpr}' tz='${CONFIG.checkinCronTz}', status cron='${CONFIG.balanceCronExpr}' tz='${CONFIG.balanceCronTz}'`,
     );
   });
 }

@@ -130,11 +130,19 @@ async function requestCheckinStatus(username) {
   });
 }
 
-async function requestUploadTokens() {
-  return request(apiBase + "/tokens/upload", {
-    method: "POST",
+async function requestExportTokens() {
+  const res = await fetch(apiBase + "/tokens/export", {
+    method: "GET",
     headers: adminHeaders(),
   });
+  if (!res.ok) {
+    let msg = await res.text();
+    try {
+      msg = JSON.parse(msg).error || msg;
+    } catch {}
+    throw new Error(msg || "请求失败: HTTP " + res.status);
+  }
+  return res.text();
 }
 
 async function requestRegisterStatus() {
@@ -836,16 +844,14 @@ function Dashboard() {
       const data = await request(apiBase + "/registers", {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, adminHeaders()),
-        body: JSON.stringify({ count: Number(registerCount || 0) || 1 }),
+        body: JSON.stringify({ count: registerCount }),
       });
-      const requestedCount = Number(data.requestedCount) || Number(registerCount || 0) || 1;
       if (data.alreadyRunning) {
-        message.info("批量注册任务已在后台运行中");
+        message.info("注册任务已在后台运行中");
       } else {
-        message.success("批量注册任务已启动，后台处理中：请求 " + requestedCount + " 个账号");
+        message.success("注册任务已启动，后台处理中");
       }
       setRegisterTask(data || null);
-      await loadAccounts(true, 1, pagination.pageSize, filters);
     } catch (error) {
       message.error(error.message);
     } finally {
@@ -853,11 +859,24 @@ function Dashboard() {
     }
   }
 
-  async function handleUploadTokens() {
-    setBusyKey("upload-tokens");
+  async function handleExportTokens() {
+    setBusyKey("export-tokens");
     try {
-      const data = await requestUploadTokens();
-      message.success("Token 上传完成，去重后共上传 " + (((data.result || {}).tokenCount) || 0) + " 个");
+      const tokens = await requestExportTokens();
+      if (!tokens) {
+        message.warning("没有找到 Token");
+        return;
+      }
+      const blob = new Blob([tokens], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "tokens.txt";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      message.success("Token 已导出并下载");
     } catch (error) {
       message.error(error.message);
     } finally {
@@ -988,7 +1007,7 @@ function Dashboard() {
               <Space wrap>
                 <InputNumber min={1} value={registerCount} onChange={function (value) { setRegisterCount(value || 1); }} />
                 <Button type="primary" onClick={handleRegister} loading={busyKey === "register"}>批量注册</Button>
-                <Button onClick={handleUploadTokens} loading={busyKey === "upload-tokens"}>上传全部 Token（自动去重）</Button>
+                <Button onClick={handleExportTokens} loading={busyKey === "export-tokens"}>导出全部 Token（自动去重）</Button>
               </Space>
 
               <Row gutter={[16, 16]}>

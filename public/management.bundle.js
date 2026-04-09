@@ -83798,11 +83798,20 @@ async function requestCheckinStatus(username) {
     body: JSON.stringify({})
   });
 }
-async function requestUploadTokens() {
-  return request(apiBase + "/tokens/upload", {
-    method: "POST",
+async function requestExportTokens() {
+  const res = await fetch(apiBase + "/tokens/export", {
+    method: "GET",
     headers: adminHeaders()
   });
+  if (!res.ok) {
+    let msg = await res.text();
+    try {
+      msg = JSON.parse(msg).error || msg;
+    } catch {
+    }
+    throw new Error(msg || "\u8BF7\u6C42\u5931\u8D25: HTTP " + res.status);
+  }
+  return res.text();
 }
 async function requestRegisterStatus() {
   return request(apiBase + "/registers/status", {
@@ -84355,27 +84364,38 @@ function Dashboard() {
       const data = await request(apiBase + "/registers", {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, adminHeaders()),
-        body: JSON.stringify({ count: Number(registerCount || 0) || 1 })
+        body: JSON.stringify({ count: registerCount })
       });
-      const requestedCount = Number(data.requestedCount) || Number(registerCount || 0) || 1;
       if (data.alreadyRunning) {
-        message.info("\u6279\u91CF\u6CE8\u518C\u4EFB\u52A1\u5DF2\u5728\u540E\u53F0\u8FD0\u884C\u4E2D");
+        message.info("\u6CE8\u518C\u4EFB\u52A1\u5DF2\u5728\u540E\u53F0\u8FD0\u884C\u4E2D");
       } else {
-        message.success("\u6279\u91CF\u6CE8\u518C\u4EFB\u52A1\u5DF2\u542F\u52A8\uFF0C\u540E\u53F0\u5904\u7406\u4E2D\uFF1A\u8BF7\u6C42 " + requestedCount + " \u4E2A\u8D26\u53F7");
+        message.success("\u6CE8\u518C\u4EFB\u52A1\u5DF2\u542F\u52A8\uFF0C\u540E\u53F0\u5904\u7406\u4E2D");
       }
       setRegisterTask(data || null);
-      await loadAccounts(true, 1, pagination.pageSize, filters);
     } catch (error) {
       message.error(error.message);
     } finally {
       setBusyKey("");
     }
   }
-  async function handleUploadTokens() {
-    setBusyKey("upload-tokens");
+  async function handleExportTokens() {
+    setBusyKey("export-tokens");
     try {
-      const data = await requestUploadTokens();
-      message.success("Token \u4E0A\u4F20\u5B8C\u6210\uFF0C\u53BB\u91CD\u540E\u5171\u4E0A\u4F20 " + ((data.result || {}).tokenCount || 0) + " \u4E2A");
+      const tokens = await requestExportTokens();
+      if (!tokens) {
+        message.warning("\u6CA1\u6709\u627E\u5230 Token");
+        return;
+      }
+      const blob = new Blob([tokens], { type: "text/plain;charset=utf-8" });
+      const url2 = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url2;
+      link.download = "tokens.txt";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url2);
+      message.success("Token \u5DF2\u5BFC\u51FA\u5E76\u4E0B\u8F7D");
     } catch (error) {
       message.error(error.message);
     } finally {
@@ -84493,7 +84513,7 @@ function Dashboard() {
             setRegisterCount(value || 1);
           } }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { type: "primary", onClick: handleRegister, loading: busyKey === "register", children: "\u6279\u91CF\u6CE8\u518C" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { onClick: handleUploadTokens, loading: busyKey === "upload-tokens", children: "\u4E0A\u4F20\u5168\u90E8 Token\uFF08\u81EA\u52A8\u53BB\u91CD\uFF09" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { onClick: handleExportTokens, loading: busyKey === "export-tokens", children: "\u5BFC\u51FA\u5168\u90E8 Token\uFF08\u81EA\u52A8\u53BB\u91CD\uFF09" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(row_default2, { gutter: [16, 16], children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(col_default2, { xs: 24, xl: 8, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 12, style: { width: "100%" }, children: [
