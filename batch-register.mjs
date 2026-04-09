@@ -1059,14 +1059,32 @@ export async function runBatchRegister(inputCount) {
       await sleep(CONFIG.operationDelayMs);
     }
 
-    const tokenListResult = await listTokensOne(loginResult);
-    const tokenFromList = tokenListResult.ok
-      ? extractTokenFromList(
-          tokenListResult.response,
-          tokenCreateResult.tokenName,
-        )
-      : "";
-    const finalTokenValue = `sk-${tokenCreateResult.tokenValue || tokenFromList}`;
+    let finalTokenValue = "";
+    if (tokenCreateResult.ok && tokenCreateResult.tokenId) {
+      const keyResult = await createTokenByIdOne(loginResult, tokenCreateResult.tokenId);
+      if (keyResult.ok) {
+        finalTokenValue = keyResult.tokenValue;
+      }
+    }
+    
+    let tokenListResult = null;
+    let tokenFromList = "";
+    
+    // 如果没有拿到真实的 tokenValue，则 fallback 到 token list 方法
+    if (!finalTokenValue) {
+      tokenListResult = await listTokensOne(loginResult);
+      tokenFromList = tokenListResult.ok
+        ? extractTokenFromList(
+            tokenListResult.response,
+            tokenCreateResult.tokenName,
+          )
+        : "";
+      finalTokenValue = `sk-${tokenCreateResult.tokenValue || tokenFromList}`;
+    } else {
+      finalTokenValue = `sk-${finalTokenValue}`;
+      // 构造一个成功状态供下面记录 workflow 使用
+      tokenListResult = { ok: true, status: 200 };
+    }
 
     await saveWorkflowStep(
       registerResult.username,
@@ -1207,16 +1225,32 @@ export async function retryAccountWorkflow(username, step) {
       };
     }
 
-    const tokenListResult = await listTokensOne(loginResult);
-    const tokenFromList = tokenListResult.ok
-      ? extractTokenFromList(
-          tokenListResult.response,
-          tokenCreateResult.tokenName,
-        )
-      : "";
-    const finalTokenValue = tokenCreateResult.ok
-      ? `sk-${tokenCreateResult.tokenValue || tokenFromList}`
-      : account.token;
+    let finalTokenValue = "";
+    if (tokenCreateResult.ok && tokenCreateResult.tokenId) {
+      const keyResult = await createTokenByIdOne(loginResult, tokenCreateResult.tokenId);
+      if (keyResult.ok) {
+        finalTokenValue = keyResult.tokenValue;
+      }
+    }
+    
+    let tokenListResult = null;
+    let tokenFromList = "";
+    
+    if (!finalTokenValue) {
+      tokenListResult = await listTokensOne(loginResult);
+      tokenFromList = tokenListResult.ok
+        ? extractTokenFromList(
+            tokenListResult.response,
+            tokenCreateResult.tokenName,
+          )
+        : "";
+      finalTokenValue = tokenCreateResult.ok
+        ? `sk-${tokenCreateResult.tokenValue || tokenFromList}`
+        : account.token;
+    } else {
+      finalTokenValue = `sk-${finalTokenValue}`;
+      tokenListResult = { ok: true, status: 200 };
+    }
 
     await saveWorkflowStep(
       currentUsername,

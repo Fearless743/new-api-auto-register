@@ -881,6 +881,29 @@ async function handleRequest(req, res) {
     }
   }
 
+  if (
+    req.method === "DELETE" &&
+    url.pathname.startsWith(buildPath("/accounts/"))
+  ) {
+    if (!requireAdminKey(req, res)) {
+      return;
+    }
+
+    const base = buildPath("/accounts/").length;
+    const username = decodeURIComponent(url.pathname.slice(base));
+
+    try {
+      const { updateStore } = await import("./storage.mjs");
+      await updateStore(CONFIG.storePath, (store) => {
+        store.accounts = store.accounts.filter(a => a.username !== username);
+        return store;
+      });
+      return json(res, 200, { ok: true, message: `Account ${username} deleted` });
+    } catch (error) {
+      return json(res, 500, { error: error?.message || "Delete failed" });
+    }
+  }
+
   return json(res, 404, { error: "Not Found" });
 }
 
