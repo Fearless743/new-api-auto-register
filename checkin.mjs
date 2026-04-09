@@ -298,11 +298,14 @@ export async function runCheckinStatusRefresh(month = currentMonth()) {
 
     try {
       const result = await refreshAccountCheckinStatus(account.username, month);
-      console.log(result);
-      okCount += 1;
-      console.log(
-        `[${i + 1}/${accounts.length}] 签到状态刷新成功 ${account.username}`,
-      );
+      
+      if (result.ok) {
+        okCount += 1;
+        console.log(`[${i + 1}/${accounts.length}] 签到状态刷新成功 ${account.username}`);
+      } else {
+        failCount += 1;
+        console.log(`[${i + 1}/${accounts.length}] 签到状态刷新失败 ${account.username} ${result.body?.message || "unknown error"}`);
+      }
     } catch (error) {
       failCount += 1;
       console.log(
