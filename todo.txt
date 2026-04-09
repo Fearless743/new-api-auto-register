@@ -1,0 +1,6 @@
+Need to add tokenRefresh logic in batch-register.mjs `retryAccountWorkflow`
+For `tokenRefresh` step:
+- Need to login (if needed)
+- Need to list tokens to find token ID if not in tokenCreate step. Wait, `listTokensOne` doesn't fetch key, it just gets the ID.
+- Need to call `createTokenByIdOne` to fetch full token.
+- Update storage with tokenValue.
