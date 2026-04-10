@@ -2,11 +2,14 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"new-api-auto-register/internal/storage"
+	"new-api-auto-register/internal/tasks"
 )
 
 var ManagementPageURL = "./management.html"
@@ -14,9 +17,29 @@ var ManagementBundleURL = "./public/management.bundle.js"
 var ManagementStyleURL = "./public/management.bundle.css"
 
 type Handlers struct {
-	StorePath   string
-	AdminAPIKey string
-	APIPrefix   string
+	StorePath      string
+	AdminAPIKey    string
+	APIPrefix      string
+	mu             sync.Mutex
+	CheckinStatus  RunStatus
+	BalanceStatus  RunStatus
+	RegisterStatus RegisterRunStatus
+}
+
+type RunStatus struct {
+	Running    bool
+	StartedAt  *string
+	FinishedAt *string
+	Error      string
+}
+
+type RegisterRunStatus struct {
+	Running        bool
+	RequestedCount int
+	StartedAt      *string
+	FinishedAt     *string
+	Summary        interface{}
+	Error          string
 }
 
 func (h *Handlers) buildPath(pathname string) string {
@@ -25,6 +48,150 @@ func (h *Handlers) buildPath(pathname string) string {
 		prefix = prefix[:len(prefix)-1]
 	}
 	return prefix + pathname
+}
+
+func nowStringPtr() *string {
+	now := string(storage.NowISO())
+	return &now
+}
+
+func (h *Handlers) startCheckinRun() map[string]interface{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.CheckinStatus.Running {
+		return map[string]interface{}{
+			"ok":             true,
+			"started":        false,
+			"alreadyRunning": true,
+			"running":        h.CheckinStatus.Running,
+			"startedAt":      h.CheckinStatus.StartedAt,
+			"finishedAt":     h.CheckinStatus.FinishedAt,
+			"error":          emptyStringToNil(h.CheckinStatus.Error),
+		}
+	}
+
+	h.CheckinStatus.Running = true
+	h.CheckinStatus.StartedAt = nowStringPtr()
+	h.CheckinStatus.FinishedAt = nil
+	h.CheckinStatus.Error = ""
+
+	go func() {
+		err := tasks.RunCheckin(h.StorePath)
+		h.mu.Lock()
+		h.CheckinStatus.Running = false
+		h.CheckinStatus.FinishedAt = nowStringPtr()
+		if err != nil {
+			h.CheckinStatus.Error = err.Error()
+		}
+		h.mu.Unlock()
+	}()
+
+	return map[string]interface{}{
+		"ok":             true,
+		"started":        true,
+		"alreadyRunning": false,
+		"running":        true,
+		"startedAt":      h.CheckinStatus.StartedAt,
+		"finishedAt":     h.CheckinStatus.FinishedAt,
+		"error":          emptyStringToNil(h.CheckinStatus.Error),
+	}
+}
+
+func (h *Handlers) startBalanceRun() map[string]interface{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.BalanceStatus.Running {
+		return map[string]interface{}{
+			"ok":             true,
+			"started":        false,
+			"alreadyRunning": true,
+			"running":        h.BalanceStatus.Running,
+			"startedAt":      h.BalanceStatus.StartedAt,
+			"finishedAt":     h.BalanceStatus.FinishedAt,
+			"error":          emptyStringToNil(h.BalanceStatus.Error),
+		}
+	}
+
+	h.BalanceStatus.Running = true
+	h.BalanceStatus.StartedAt = nowStringPtr()
+	h.BalanceStatus.FinishedAt = nil
+	h.BalanceStatus.Error = ""
+
+	go func() {
+		err := tasks.RunCheckinStatusRefresh(h.StorePath, "")
+		h.mu.Lock()
+		h.BalanceStatus.Running = false
+		h.BalanceStatus.FinishedAt = nowStringPtr()
+		if err != nil {
+			h.BalanceStatus.Error = err.Error()
+		}
+		h.mu.Unlock()
+	}()
+
+	return map[string]interface{}{
+		"ok":             true,
+		"started":        true,
+		"alreadyRunning": false,
+		"running":        true,
+		"startedAt":      h.BalanceStatus.StartedAt,
+		"finishedAt":     h.BalanceStatus.FinishedAt,
+		"error":          emptyStringToNil(h.BalanceStatus.Error),
+	}
+}
+
+func (h *Handlers) startRegisterRun(count int) map[string]interface{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.RegisterStatus.Running {
+		return map[string]interface{}{
+			"ok":             true,
+			"started":        false,
+			"alreadyRunning": true,
+			"running":        h.RegisterStatus.Running,
+			"requestedCount": h.RegisterStatus.RequestedCount,
+			"startedAt":      h.RegisterStatus.StartedAt,
+			"finishedAt":     h.RegisterStatus.FinishedAt,
+			"summary":        h.RegisterStatus.Summary,
+			"error":          emptyStringToNil(h.RegisterStatus.Error),
+		}
+	}
+
+	if count < 1 {
+		count = 1
+	}
+	h.RegisterStatus.Running = true
+	h.RegisterStatus.RequestedCount = count
+	h.RegisterStatus.StartedAt = nowStringPtr()
+	h.RegisterStatus.FinishedAt = nil
+	h.RegisterStatus.Summary = nil
+	h.RegisterStatus.Error = ""
+
+	go func(requestedCount int) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.RegisterStatus.Running = false
+		h.RegisterStatus.FinishedAt = nowStringPtr()
+		h.RegisterStatus.Error = "Go batch register workflow not implemented yet"
+		h.RegisterStatus.Summary = map[string]interface{}{
+			"requestedCount": requestedCount,
+			"createdCount":   0,
+		}
+	}(count)
+
+	return map[string]interface{}{
+		"ok":             true,
+		"started":        true,
+		"alreadyRunning": false,
+		"running":        true,
+		"requestedCount": h.RegisterStatus.RequestedCount,
+		"startedAt":      h.RegisterStatus.StartedAt,
+		"finishedAt":     h.RegisterStatus.FinishedAt,
+		"summary":        h.RegisterStatus.Summary,
+		"error":          emptyStringToNil(h.RegisterStatus.Error),
+	}
 }
 
 func (h *Handlers) HandleHealthz(w http.ResponseWriter, r *http.Request) {
@@ -87,13 +254,18 @@ func (h *Handlers) HandleGetAccounts(w http.ResponseWriter, r *http.Request) {
 	}
 	paged := filtered[start:end]
 
+	serialized := make([]map[string]interface{}, 0, len(paged))
+	for _, account := range paged {
+		serialized = append(serialized, serializeAccount(account))
+	}
+
 	RespondJSON(w, http.StatusOK, map[string]interface{}{
 		"count":    len(filtered),
 		"total":    len(filtered),
 		"page":     page,
 		"pageSize": pageSize,
 		"summary":  buildAccountsSummary(store.Accounts, filtered),
-		"accounts": paged,
+		"accounts": serialized,
 	})
 }
 
@@ -102,7 +274,15 @@ func (h *Handlers) HandleGetRegisterStatus(w http.ResponseWriter, r *http.Reques
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+	RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":             true,
+		"running":        h.RegisterStatus.Running,
+		"requestedCount": h.RegisterStatus.RequestedCount,
+		"startedAt":      h.RegisterStatus.StartedAt,
+		"finishedAt":     h.RegisterStatus.FinishedAt,
+		"summary":        h.RegisterStatus.Summary,
+		"error":          emptyStringToNil(h.RegisterStatus.Error),
+	})
 }
 
 func (h *Handlers) HandleGetCheckinStatus(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +290,13 @@ func (h *Handlers) HandleGetCheckinStatus(w http.ResponseWriter, r *http.Request
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+	RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":         true,
+		"running":    h.CheckinStatus.Running,
+		"startedAt":  h.CheckinStatus.StartedAt,
+		"finishedAt": h.CheckinStatus.FinishedAt,
+		"error":      emptyStringToNil(h.CheckinStatus.Error),
+	})
 }
 
 func (h *Handlers) HandleGetBalanceStatus(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +304,13 @@ func (h *Handlers) HandleGetBalanceStatus(w http.ResponseWriter, r *http.Request
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+	RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":         true,
+		"running":    h.BalanceStatus.Running,
+		"startedAt":  h.BalanceStatus.StartedAt,
+		"finishedAt": h.BalanceStatus.FinishedAt,
+		"error":      emptyStringToNil(h.BalanceStatus.Error),
+	})
 }
 
 func (h *Handlers) HandlePostRegister(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +325,7 @@ func (h *Handlers) HandlePostRegister(w http.ResponseWriter, r *http.Request) {
 		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
 		return
 	}
-	RespondJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "started": true})
+	RespondJSON(w, http.StatusAccepted, h.startRegisterRun(body.Count))
 }
 
 func (h *Handlers) HandlePostCheckin(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +333,7 @@ func (h *Handlers) HandlePostCheckin(w http.ResponseWriter, r *http.Request) {
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "started": true})
+	RespondJSON(w, http.StatusAccepted, h.startCheckinRun())
 }
 
 func (h *Handlers) HandlePostBalanceRefresh(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +341,7 @@ func (h *Handlers) HandlePostBalanceRefresh(w http.ResponseWriter, r *http.Reque
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "started": true})
+	RespondJSON(w, http.StatusAccepted, h.startBalanceRun())
 }
 
 func (h *Handlers) HandlePostTokenUpload(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +357,15 @@ func (h *Handlers) HandleGetTokenExport(w http.ResponseWriter, r *http.Request) 
 		Unauthorized(w)
 		return
 	}
-	RespondText(w, http.StatusOK, "", "text/plain; charset=utf-8")
+
+	store, err := storage.ReadStore(h.StorePath)
+	if err != nil {
+		RespondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Token export failed"})
+		return
+	}
+
+	tokens := storage.ListUniqueTokens(&store)
+	RespondText(w, http.StatusOK, strings.Join(tokens, "\n"), "text/plain; charset=utf-8")
 }
 
 func (h *Handlers) HandlePostAccountRetry(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +381,36 @@ func (h *Handlers) HandlePostAccountCheckinStatus(w http.ResponseWriter, r *http
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+
+	username := strings.TrimPrefix(r.URL.Path, h.buildPath("/accounts/"))
+	username = strings.TrimSuffix(username, "/checkin-status")
+	username = strings.TrimSpace(username)
+	if username == "" {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "username is required"})
+		return
+	}
+
+	username, err := url.PathUnescape(username)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
+		return
+	}
+
+	var body struct {
+		Month string `json:"month"`
+	}
+	if err := readJSONBody(r, &body); err != nil && err.Error() != "EOF" {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
+		return
+	}
+
+	result, err := tasks.RefreshAccountCheckinStatus(h.StorePath, username, body.Month)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "result": result})
 }
 
 func (h *Handlers) HandlePostAccountCheckin(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +418,28 @@ func (h *Handlers) HandlePostAccountCheckin(w http.ResponseWriter, r *http.Reque
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+
+	username := strings.TrimPrefix(r.URL.Path, h.buildPath("/accounts/"))
+	username = strings.TrimSuffix(username, "/checkin")
+	username = strings.TrimSpace(username)
+	if username == "" {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "username is required"})
+		return
+	}
+
+	username, err := url.PathUnescape(username)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
+		return
+	}
+
+	result, err := tasks.ManualCheckin(h.StorePath, username)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "result": result})
 }
 
 func (h *Handlers) HandlePostAccountBalance(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +447,28 @@ func (h *Handlers) HandlePostAccountBalance(w http.ResponseWriter, r *http.Reque
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+
+	username := strings.TrimPrefix(r.URL.Path, h.buildPath("/accounts/"))
+	username = strings.TrimSuffix(username, "/balance")
+	username = strings.TrimSpace(username)
+	if username == "" {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "username is required"})
+		return
+	}
+
+	username, err := url.PathUnescape(username)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
+		return
+	}
+
+	account, err := tasks.RefreshAccountBalance(h.StorePath, username)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "account": serializeAccount(*account)})
 }
 
 func (h *Handlers) HandleDeleteAccount(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +476,53 @@ func (h *Handlers) HandleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Account deleted"})
+
+	username := strings.TrimPrefix(r.URL.Path, h.buildPath("/accounts/"))
+	username = strings.TrimSpace(username)
+	if username == "" {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "username is required"})
+		return
+	}
+
+	username, err := url.PathUnescape(username)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
+		return
+	}
+
+	err = storage.UpdateStore(h.StorePath, func(store *storage.Store) error {
+		accounts := make([]storage.Account, 0, len(store.Accounts))
+		for _, account := range store.Accounts {
+			if account.Username != username {
+				accounts = append(accounts, account)
+			}
+		}
+		store.Accounts = accounts
+
+		balanceAccounts := make([]storage.BalanceAccount, 0, len(store.BalanceSnapshot.Accounts))
+		var totalQuota float64
+		var totalUsedQuota float64
+		for _, account := range store.BalanceSnapshot.Accounts {
+			if account.Username == username {
+				continue
+			}
+			balanceAccounts = append(balanceAccounts, account)
+			totalQuota += account.Quota
+			totalUsedQuota += account.UsedQuota
+		}
+		store.BalanceSnapshot.Accounts = balanceAccounts
+		store.BalanceSnapshot.TotalQuota = totalQuota
+		store.BalanceSnapshot.TotalUsedQuota = totalUsedQuota
+		store.BalanceSnapshot.TotalBalance = quotaToUSD(totalQuota)
+		store.BalanceSnapshot.TotalUsedBalance = quotaToUSD(totalUsedQuota)
+		return nil
+	})
+	if err != nil {
+		RespondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Delete failed"})
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Account " + username + " deleted"})
 }
 
 func (h *Handlers) HandleManagementLogin(w http.ResponseWriter, r *http.Request) {

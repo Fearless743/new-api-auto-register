@@ -13,6 +13,16 @@ type CheckinRecord struct {
 	QuotaAwarded float64 `json:"quotaAwarded"`
 }
 
+// LastCheckinResult stores the latest manual or batch check-in result on the account.
+type LastCheckinResult struct {
+	Status       int      `json:"status"`
+	Success      bool     `json:"success"`
+	Message      string   `json:"message"`
+	CheckinDate  string   `json:"checkinDate"`
+	QuotaAwarded *float64 `json:"quotaAwarded"`
+	Time         *ISOTime `json:"time"`
+}
+
 // CheckinStatus represents the overall check-in status of an account
 type CheckinStatus struct {
 	Month          string          `json:"month"`
@@ -44,26 +54,26 @@ type Workflow struct {
 
 // Account represents a user account
 type Account struct {
-	Username          string        `json:"username"`
-	Password          string        `json:"password"`
-	Token             string        `json:"token"`
-	Session           string        `json:"session"`
-	NewAPIUser        string        `json:"newApiUser"`
-	BaseURL           string        `json:"baseUrl"`
-	CreatedAt         *ISOTime      `json:"createdAt"`
-	UpdatedAt         *ISOTime      `json:"updatedAt"`
-	LastLoginAt       *ISOTime      `json:"lastLoginAt"`
-	LastCheckinAt     *ISOTime      `json:"lastCheckinAt"`
-	LastCheckin       *ISOTime      `json:"lastCheckin"`
-	CheckinStatus     CheckinStatus `json:"checkinStatus"`
-	LastBalanceAt     *ISOTime      `json:"lastBalanceAt"`
-	LastBalanceQuota  *float64      `json:"lastBalanceQuota"`
-	LastBalance       *string       `json:"lastBalance"`
-	LastUsedQuota     *float64      `json:"lastUsedQuota"`
-	LastUsedBalance   *string       `json:"lastUsedBalance"`
-	LastBalanceStatus *int          `json:"lastBalanceStatus"`
-	Workflow          Workflow      `json:"workflow"`
-	Notes             []string      `json:"notes"`
+	Username          string             `json:"username"`
+	Password          string             `json:"password"`
+	Token             string             `json:"token"`
+	Session           string             `json:"session"`
+	NewAPIUser        string             `json:"newApiUser"`
+	BaseURL           string             `json:"baseUrl"`
+	CreatedAt         *ISOTime           `json:"createdAt"`
+	UpdatedAt         *ISOTime           `json:"updatedAt"`
+	LastLoginAt       *ISOTime           `json:"lastLoginAt"`
+	LastCheckinAt     *ISOTime           `json:"lastCheckinAt"`
+	LastCheckin       *LastCheckinResult `json:"lastCheckin"`
+	CheckinStatus     CheckinStatus      `json:"checkinStatus"`
+	LastBalanceAt     *ISOTime           `json:"lastBalanceAt"`
+	LastBalanceQuota  *float64           `json:"lastBalanceQuota"`
+	LastBalance       *string            `json:"lastBalance"`
+	LastUsedQuota     *float64           `json:"lastUsedQuota"`
+	LastUsedBalance   *string            `json:"lastUsedBalance"`
+	LastBalanceStatus *int               `json:"lastBalanceStatus"`
+	Workflow          Workflow           `json:"workflow"`
+	Notes             []string           `json:"notes"`
 }
 
 // CheckinEntry represents a global check-in log entry

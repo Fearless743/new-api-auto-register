@@ -4,10 +4,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 
 	"new-api-auto-register/internal/storage"
 )
+
+func serializeAccount(account storage.Account) map[string]interface{} {
+	return map[string]interface{}{
+		"username":         account.Username,
+		"password":         account.Password,
+		"session":          account.Session,
+		"token":            account.Token,
+		"newApiUser":       account.NewAPIUser,
+		"workflow":         account.Workflow,
+		"checkinStatus":    account.CheckinStatus,
+		"updatedAt":        account.UpdatedAt,
+		"lastBalanceAt":    account.LastBalanceAt,
+		"lastBalanceQuota": account.LastBalanceQuota,
+		"lastBalance":      account.LastBalance,
+		"lastUsedQuota":    account.LastUsedQuota,
+		"lastUsedBalance":  account.LastUsedBalance,
+		"lastCheckinAt":    account.LastCheckinAt,
+		"lastCheckin":      account.LastCheckin,
+	}
+}
+
+func emptyStringToNil(value string) interface{} {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
+}
+
+func quotaToUSD(quota float64) string {
+	if math.IsNaN(quota) || math.IsInf(quota, 0) {
+		return "$0.00"
+	}
+	usd := (quota * 2) / 1_000_000
+	return fmt.Sprintf("$%.2f", usd)
+}
 
 func renderManagementLoginPage(errorMessage string) string {
 	errorBlock := ""
