@@ -84007,6 +84007,7 @@ function Dashboard() {
   const [registerTask, setRegisterTask] = (0, import_react146.useState)(null);
   const [selectedRowKeys, setSelectedRowKeys] = (0, import_react146.useState)([]);
   const [registerCount, setRegisterCount] = (0, import_react146.useState)(5);
+  const [registerBaseUrl, setRegisterBaseUrl] = (0, import_react146.useState)("");
   const [pagination, setPagination] = (0, import_react146.useState)({ current: 1, pageSize: 1e4, total: 0 });
   const [filters, setFilters] = (0, import_react146.useState)({
     keyword: "",
@@ -84243,12 +84244,17 @@ function Dashboard() {
     setBusyKey("");
   }
   async function handleRegister() {
-    setBusyKey("register");
+    const key = "register";
+    setBusyKey(key);
     try {
-      const data = await request(apiBase + "/registers", {
+      var requestBody = { count: registerCount };
+      if (registerBaseUrl && registerBaseUrl.trim() !== "") {
+        requestBody.baseUrl = registerBaseUrl.trim();
+      }
+      var data = await request(apiBase + "/registers", {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, adminHeaders()),
-        body: JSON.stringify({ count: registerCount })
+        body: JSON.stringify(requestBody)
       });
       if (data.alreadyRunning) {
         message.info("\u6CE8\u518C\u4EFB\u52A1\u5DF2\u5728\u540E\u53F0\u8FD0\u884C\u4E2D");
@@ -84412,6 +84418,9 @@ function Dashboard() {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(input_number_default, { min: 1, value: registerCount, onChange: function(value) {
             setRegisterCount(value || 1);
           } }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(input_default, { placeholder: "\u81EA\u5B9A\u4E49 BaseURL\uFF08\u53EF\u9009\uFF09", value: registerBaseUrl, onChange: function(e) {
+            setRegisterBaseUrl(e.target.value);
+          }, style: { width: 200 } }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { type: "primary", onClick: handleRegister, loading: busyKey === "register", children: "\u6279\u91CF\u6CE8\u518C" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(button_default, { onClick: handleExportTokens, loading: busyKey === "export-tokens", children: "\u5BFC\u51FA\u5168\u90E8 Token\uFF08\u81EA\u52A8\u53BB\u91CD\uFF09" })
         ] }),

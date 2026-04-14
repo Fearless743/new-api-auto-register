@@ -439,6 +439,7 @@ function Dashboard() {
   const [registerTask, setRegisterTask] = useState(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [registerCount, setRegisterCount] = useState(5);
+  const [registerBaseUrl, setRegisterBaseUrl] = useState("");
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10000, total: 0 });
   const [filters, setFilters] = useState({
     keyword: "",
@@ -712,13 +713,18 @@ function Dashboard() {
     setBusyKey("");
   }
 
-  async function handleRegister() {
-    setBusyKey("register");
+async function handleRegister() {
+    const key = "register";
+    setBusyKey(key);
     try {
-      const data = await request(apiBase + "/registers", {
+      var requestBody = { count: registerCount };
+      if (registerBaseUrl && registerBaseUrl.trim() !== "") {
+        requestBody.baseUrl = registerBaseUrl.trim();
+      }
+      var data = await request(apiBase + "/registers", {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, adminHeaders()),
-        body: JSON.stringify({ count: registerCount }),
+        body: JSON.stringify(requestBody),
       });
       if (data.alreadyRunning) {
         message.info("注册任务已在后台运行中");
@@ -903,6 +909,7 @@ function Dashboard() {
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
               <Space wrap>
                 <InputNumber min={1} value={registerCount} onChange={function (value) { setRegisterCount(value || 1); }} />
+                <Input placeholder="自定义 BaseURL（可选）" value={registerBaseUrl} onChange={function (e) { setRegisterBaseUrl(e.target.value); }} style={{ width: 200 }} />
                 <Button type="primary" onClick={handleRegister} loading={busyKey === "register"}>批量注册</Button>
                 <Button onClick={handleExportTokens} loading={busyKey === "export-tokens"}>导出全部 Token（自动去重）</Button>
               </Space>
