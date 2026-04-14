@@ -373,17 +373,18 @@ func registerWithCredential(config Config, username, password string) registerRe
 	email := ""
 
 	// Auto-detect if email verification is required
+	// Only try Emailnator if upstream requires email verification
 	if needsEmailVerification(config.BaseURL) {
 		log.Printf("[emailnator] starting for %s", username)
 		client := newEmailnatorClient()
 		if err := client.generateEmail(); err != nil {
-			log.Printf("[emailnator] generate email failed: %v, continuing anyway", err)
+			log.Printf("[emailnator] generate email failed: %v", err)
 		} else {
 			email = client.email
 			payload["email"] = email
 			code, err := client.waitForVerificationCode(config.BaseURL)
 			if err != nil {
-				log.Printf("[emailnator] verification code failed: %v, continuing anyway", err)
+				log.Printf("[emailnator] verification code failed: %v", err)
 			} else {
 				payload["verification_code"] = code
 			}
