@@ -38,6 +38,7 @@ type Config struct {
 	ManagementExistingKeys string
 	TokenTxtPath           string
 	TokenCSVPath           string
+	EnableEmail            bool
 }
 
 type loginResult struct {

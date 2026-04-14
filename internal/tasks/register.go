@@ -318,6 +318,26 @@ func registerWithCredential(config Config, username, password string) registerRe
 		"wechat_verification_code": "",
 		"aff_code":                 "",
 	}
+
+	email := ""
+
+	if config.EnableEmail {
+		log.Printf("[emailnator] starting for %s", username)
+		client := newEmailnatorClient()
+		if err := client.generateEmail(); err != nil {
+			log.Printf("[emailnator] generate email failed: %v", err)
+		} else {
+			email = client.email
+			payload["email"] = email
+			code, err := client.waitForVerificationCode(config.BaseURL)
+			if err != nil {
+				log.Printf("[emailnator] verification code failed: %v", err)
+			} else {
+				payload["verification_code"] = code
+			}
+		}
+	}
+
 	requestURL := strings.TrimRight(config.BaseURL, "/") + "/api/user/register?turnstile="
 	headers := commonHeaders(config.BaseURL)
 	headers["Content-Type"] = "application/json"
