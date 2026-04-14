@@ -77,6 +77,7 @@ func LoadConfig() Config {
 		ManagementExistingKeys: os.Getenv("MANAGEMENT_EXISTING_TOKENS"),
 		TokenTxtPath:           envOr("TOKEN_TXT_PATH", "./tokens.txt"),
 		TokenCSVPath:           envOr("TOKEN_CSV_PATH", "./tokens.csv"),
+		EnableEmail:            envBool("ENABLE_EMAIL", false),
 	}
 }
 
@@ -98,6 +99,14 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return result
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if value == "" {
+		return fallback
+	}
+	return value == "true" || value == "1" || value == "yes"
 }
 
 func parsePossibleUserID(response map[string]any) string {
