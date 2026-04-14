@@ -12,21 +12,23 @@ import (
 
 func serializeAccount(account storage.Account) map[string]interface{} {
 	return map[string]interface{}{
-		"username":         account.Username,
-		"password":         account.Password,
-		"session":          account.Session,
-		"token":            account.Token,
-		"newApiUser":       account.NewAPIUser,
-		"workflow":         account.Workflow,
-		"checkinStatus":    account.CheckinStatus,
-		"updatedAt":        account.UpdatedAt,
-		"lastBalanceAt":    account.LastBalanceAt,
-		"lastBalanceQuota": account.LastBalanceQuota,
-		"lastBalance":      account.LastBalance,
-		"lastUsedQuota":    account.LastUsedQuota,
-		"lastUsedBalance":  account.LastUsedBalance,
-		"lastCheckinAt":    account.LastCheckinAt,
-		"lastCheckin":      account.LastCheckin,
+		"username":          account.Username,
+		"password":          account.Password,
+		"session":           account.Session,
+		"token":             account.Token,
+		"newApiUser":        account.NewAPIUser,
+		"workflow":          account.Workflow,
+		"checkinStatus":     account.CheckinStatus,
+		"updatedAt":         account.UpdatedAt,
+		"lastLoginAt":       account.LastLoginAt,
+		"lastBalanceAt":     account.LastBalanceAt,
+		"lastBalanceQuota":  account.LastBalanceQuota,
+		"lastBalance":       account.LastBalance,
+		"lastUsedQuota":     account.LastUsedQuota,
+		"lastUsedBalance":   account.LastUsedBalance,
+		"lastBalanceStatus": account.LastBalanceStatus,
+		"lastCheckinAt":     account.LastCheckinAt,
+		"lastCheckin":       account.LastCheckin,
 	}
 }
 
@@ -150,7 +152,7 @@ func decodeJSON(r io.Reader, dest interface{}) error {
 }
 
 func filterAccounts(accounts []storage.Account, keyword, statusMode, step string) []storage.Account {
-	workflowSteps := []string{"register", "login", "tokenCreate", "tokenList"}
+	workflowSteps := []string{"register", "login", "tokenCreate", "tokenList", "tokenRefresh"}
 
 	var result []storage.Account
 	for _, account := range accounts {
@@ -184,6 +186,8 @@ func filterAccounts(accounts []storage.Account, keyword, statusMode, step string
 				st = workflow.TokenCreate.Status
 			case "tokenList":
 				st = workflow.TokenList.Status
+			case "tokenRefresh":
+				st = workflow.TokenRefresh.Status
 			}
 			if st == "failed" {
 				hasFailed = true
@@ -211,6 +215,8 @@ func filterAccounts(accounts []storage.Account, keyword, statusMode, step string
 				st = workflow.TokenCreate.Status
 			case "tokenList":
 				st = workflow.TokenList.Status
+			case "tokenRefresh":
+				st = workflow.TokenRefresh.Status
 			}
 			if st != "success" {
 				allSuccess = false
@@ -239,7 +245,7 @@ func filterAccounts(accounts []storage.Account, keyword, statusMode, step string
 }
 
 func buildAccountsSummary(accounts, filteredAccounts []storage.Account) map[string]interface{} {
-	workflowSteps := []string{"register", "login", "tokenCreate", "tokenList"}
+	workflowSteps := []string{"register", "login", "tokenCreate", "tokenList", "tokenRefresh"}
 
 	var failed, success int
 	for _, account := range accounts {
@@ -257,6 +263,8 @@ func buildAccountsSummary(accounts, filteredAccounts []storage.Account) map[stri
 				st = account.Workflow.TokenCreate.Status
 			case "tokenList":
 				st = account.Workflow.TokenList.Status
+			case "tokenRefresh":
+				st = account.Workflow.TokenRefresh.Status
 			}
 			if st == "failed" {
 				hasFailed = true
@@ -289,6 +297,9 @@ func buildAccountsSummary(accounts, filteredAccounts []storage.Account) map[stri
 		}
 		if account.Workflow.TokenList.LastRunAt != nil {
 			ts = append(ts, string(*account.Workflow.TokenList.LastRunAt))
+		}
+		if account.Workflow.TokenRefresh.LastRunAt != nil {
+			ts = append(ts, string(*account.Workflow.TokenRefresh.LastRunAt))
 		}
 		if account.UpdatedAt != nil {
 			ts = append(ts, string(*account.UpdatedAt))

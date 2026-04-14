@@ -180,15 +180,11 @@ func UpsertAccountInStore(store *Store, accountPatch Account) {
 
 	now := NowISO()
 	existing := FindAccount(store, username)
-	merged := accountPatch
+	merged := mergeAccount(existing, accountPatch)
 	merged.Username = username
 	merged.UpdatedAt = Ptr(now)
 
-	if existing != nil {
-		if merged.CreatedAt == nil {
-			merged.CreatedAt = existing.CreatedAt
-		}
-	} else if merged.CreatedAt == nil {
+	if existing == nil && merged.CreatedAt == nil {
 		merged.CreatedAt = Ptr(now)
 	}
 
@@ -384,11 +380,107 @@ func normalizeLastCheckinResult(value any) *LastCheckinResult {
 func normalizeWorkflow(value any) Workflow {
 	raw := asMap(value)
 	return Workflow{
-		Register:    normalizeWorkflowStep(raw["register"]),
-		Login:       normalizeWorkflowStep(raw["login"]),
-		TokenCreate: normalizeWorkflowStep(raw["tokenCreate"]),
-		TokenList:   normalizeWorkflowStep(raw["tokenList"]),
+		Register:     normalizeWorkflowStep(raw["register"]),
+		Login:        normalizeWorkflowStep(raw["login"]),
+		TokenCreate:  normalizeWorkflowStep(raw["tokenCreate"]),
+		TokenList:    normalizeWorkflowStep(raw["tokenList"]),
+		TokenRefresh: normalizeWorkflowStep(raw["tokenRefresh"]),
 	}
+}
+
+func mergeAccount(existing *Account, patch Account) Account {
+	if existing == nil {
+		return normalizeAccount(patch)
+	}
+
+	merged := *existing
+	if patch.Username != "" {
+		merged.Username = patch.Username
+	}
+	if patch.Password != "" {
+		merged.Password = patch.Password
+	}
+	if patch.Token != "" {
+		merged.Token = patch.Token
+	}
+	if patch.Session != "" {
+		merged.Session = patch.Session
+	}
+	if patch.NewAPIUser != "" {
+		merged.NewAPIUser = patch.NewAPIUser
+	}
+	if patch.BaseURL != "" {
+		merged.BaseURL = patch.BaseURL
+	}
+	if patch.CreatedAt != nil {
+		merged.CreatedAt = patch.CreatedAt
+	}
+	if patch.UpdatedAt != nil {
+		merged.UpdatedAt = patch.UpdatedAt
+	}
+	if patch.LastLoginAt != nil {
+		merged.LastLoginAt = patch.LastLoginAt
+	}
+	if patch.LastCheckinAt != nil {
+		merged.LastCheckinAt = patch.LastCheckinAt
+	}
+	if patch.LastCheckin != nil {
+		merged.LastCheckin = patch.LastCheckin
+	}
+	if shouldReplaceCheckinStatus(patch.CheckinStatus) {
+		merged.CheckinStatus = patch.CheckinStatus
+	}
+	if patch.LastBalanceAt != nil {
+		merged.LastBalanceAt = patch.LastBalanceAt
+	}
+	if patch.LastBalanceQuota != nil {
+		merged.LastBalanceQuota = patch.LastBalanceQuota
+	}
+	if patch.LastBalance != nil {
+		merged.LastBalance = patch.LastBalance
+	}
+	if patch.LastUsedQuota != nil {
+		merged.LastUsedQuota = patch.LastUsedQuota
+	}
+	if patch.LastUsedBalance != nil {
+		merged.LastUsedBalance = patch.LastUsedBalance
+	}
+	if patch.LastBalanceStatus != nil {
+		merged.LastBalanceStatus = patch.LastBalanceStatus
+	}
+	merged.Workflow = mergeWorkflow(existing.Workflow, patch.Workflow)
+	if patch.Notes != nil {
+		merged.Notes = patch.Notes
+	}
+	return normalizeAccount(merged)
+}
+
+func mergeWorkflow(existing Workflow, patch Workflow) Workflow {
+	merged := existing
+	if shouldReplaceWorkflowStep(patch.Register) {
+		merged.Register = patch.Register
+	}
+	if shouldReplaceWorkflowStep(patch.Login) {
+		merged.Login = patch.Login
+	}
+	if shouldReplaceWorkflowStep(patch.TokenCreate) {
+		merged.TokenCreate = patch.TokenCreate
+	}
+	if shouldReplaceWorkflowStep(patch.TokenList) {
+		merged.TokenList = patch.TokenList
+	}
+	if shouldReplaceWorkflowStep(patch.TokenRefresh) {
+		merged.TokenRefresh = patch.TokenRefresh
+	}
+	return merged
+}
+
+func shouldReplaceWorkflowStep(step WorkflowStep) bool {
+	return step.Status != "" || step.LastRunAt != nil || step.HTTPStatus != nil || step.Message != "" || step.RequestURL != "" || step.Attempt != nil
+}
+
+func shouldReplaceCheckinStatus(status CheckinStatus) bool {
+	return status.Month != "" || status.CheckedInToday || status.CheckinCount != 0 || status.TotalCheckins != 0 || status.TotalQuota != 0 || len(status.Records) > 0 || status.UpdatedAt != nil
 }
 
 func normalizeWorkflowStep(value any) WorkflowStep {

@@ -120,7 +120,7 @@ func (h *Handlers) startBalanceRun() map[string]interface{} {
 	h.BalanceStatus.Error = ""
 
 	go func() {
-		err := tasks.RunCheckinStatusRefresh(h.StorePath, "")
+		err := tasks.RunBalanceRefresh(h.StorePath, "")
 		h.mu.Lock()
 		h.BalanceStatus.Running = false
 		h.BalanceStatus.FinishedAt = nowStringPtr()
@@ -170,15 +170,15 @@ func (h *Handlers) startRegisterRun(count int) map[string]interface{} {
 	h.RegisterStatus.Error = ""
 
 	go func(requestedCount int) {
+		summary, err := tasks.RunBatchRegister(h.StorePath, requestedCount)
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.RegisterStatus.Running = false
 		h.RegisterStatus.FinishedAt = nowStringPtr()
-		h.RegisterStatus.Error = "Go batch register workflow not implemented yet"
-		h.RegisterStatus.Summary = map[string]interface{}{
-			"requestedCount": requestedCount,
-			"createdCount":   0,
+		if err != nil {
+			h.RegisterStatus.Error = err.Error()
 		}
+		h.RegisterStatus.Summary = summary
 	}(count)
 
 	return map[string]interface{}{
@@ -349,7 +349,12 @@ func (h *Handlers) HandlePostTokenUpload(w http.ResponseWriter, r *http.Request)
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+	result, err := tasks.RunTokenUpload(h.StorePath)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "result": result})
 }
 
 func (h *Handlers) HandleGetTokenExport(w http.ResponseWriter, r *http.Request) {
@@ -373,7 +378,41 @@ func (h *Handlers) HandlePostAccountRetry(w http.ResponseWriter, r *http.Request
 		Unauthorized(w)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+
+	username := strings.TrimPrefix(r.URL.Path, h.buildPath("/accounts/"))
+	username = strings.TrimSuffix(username, "/retry")
+	username = strings.TrimSpace(username)
+	if username == "" {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "username is required"})
+		return
+	}
+
+	username, err := url.PathUnescape(username)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
+		return
+	}
+
+	var body struct {
+		Step string `json:"step"`
+	}
+	if err := readJSONBody(r, &body); err != nil && err.Error() != "EOF" {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
+		return
+	}
+
+	step := body.Step
+	if step == "" {
+		step = "login"
+	}
+
+	result, err := tasks.RetryAccountWorkflow(h.StorePath, username, step)
+	if err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "result": result})
 }
 
 func (h *Handlers) HandlePostAccountCheckinStatus(w http.ResponseWriter, r *http.Request) {

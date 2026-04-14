@@ -12,6 +12,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"new-api-auto-register/internal/server"
 	"new-api-auto-register/internal/storage"
+	"new-api-auto-register/internal/tasks"
 )
 
 func main() {
@@ -98,12 +99,22 @@ func main() {
 	c := cron.New(cron.WithLocation(loc))
 	_, _ = c.AddFunc(checkinCronExpr, func() {
 		log.Println("[service] scheduled checkin triggered")
+		go func() {
+			if err := tasks.RunCheckin(storePath); err != nil {
+				log.Printf("[service] scheduled checkin error: %v", err)
+			}
+		}()
 	})
 
 	balanceLoc, _ := time.LoadLocation(balanceCronTz)
 	c2 := cron.New(cron.WithLocation(balanceLoc))
 	_, _ = c2.AddFunc(balanceCronExpr, func() {
 		log.Println("[service] scheduled balance refresh triggered")
+		go func() {
+			if err := tasks.RunBalanceRefresh(storePath, ""); err != nil {
+				log.Printf("[service] scheduled balance refresh error: %v", err)
+			}
+		}()
 	})
 
 	c.Start()
@@ -111,6 +122,11 @@ func main() {
 
 	if runBalanceOnStart {
 		log.Println("[service] running initial balance refresh on startup")
+		go func() {
+			if err := tasks.RunBalanceRefresh(storePath, ""); err != nil {
+				log.Printf("[service] initial balance refresh error: %v", err)
+			}
+		}()
 	}
 
 	// Start server

@@ -18,13 +18,26 @@ import (
 var sessionCookieRegexp = regexp.MustCompile(`(?:^|[;,\s])session=([^;\s,]+)`)
 
 type Config struct {
-	BaseURL           string
-	StorePath         string
-	RequestDelayMs    int
-	ExtraCookies      string
-	DefaultNewAPIUser string
-	CheckinMaxRetries int
-	CheckinRetryDelay int
+	BaseURL                string
+	StorePath              string
+	RequestDelayMs         int
+	ExtraCookies           string
+	DefaultNewAPIUser      string
+	CheckinMaxRetries      int
+	CheckinRetryDelay      int
+	RegisterMaxRetries     int
+	RateLimitRetryDelayMs  int
+	UsernamePrefix         string
+	UsernameMaxLen         int
+	PasswordLen            int
+	OperationDelayMs       int
+	TokenNamePrefix        string
+	StaticAccessToken      string
+	ManagementURL          string
+	ManagementBearer       string
+	ManagementExistingKeys string
+	TokenTxtPath           string
+	TokenCSVPath           string
 }
 
 type loginResult struct {
@@ -43,13 +56,26 @@ type apiResult struct {
 
 func LoadConfig() Config {
 	return Config{
-		BaseURL:           envOr("BASE_URL", "https://open.lxcloud.dev"),
-		StorePath:         envOr("STORE_PATH", "./data/store.json"),
-		RequestDelayMs:    envInt("QUERY_DELAY_MS", 1000),
-		ExtraCookies:      os.Getenv("EXTRA_COOKIES"),
-		DefaultNewAPIUser: os.Getenv("NEW_API_USER"),
-		CheckinMaxRetries: envInt("CHECKIN_MAX_RETRIES", 4),
-		CheckinRetryDelay: envInt("CHECKIN_RETRY_DELAY_MS", 300000),
+		BaseURL:                envOr("BASE_URL", "https://open.lxcloud.dev"),
+		StorePath:              envOr("STORE_PATH", "./data/store.json"),
+		RequestDelayMs:         envInt("QUERY_DELAY_MS", 1000),
+		ExtraCookies:           os.Getenv("EXTRA_COOKIES"),
+		DefaultNewAPIUser:      os.Getenv("NEW_API_USER"),
+		CheckinMaxRetries:      envInt("CHECKIN_MAX_RETRIES", 4),
+		CheckinRetryDelay:      envInt("CHECKIN_RETRY_DELAY_MS", 300000),
+		RegisterMaxRetries:     envInt("REGISTER_MAX_RETRIES", 4),
+		RateLimitRetryDelayMs:  envInt("RATE_LIMIT_RETRY_DELAY_MS", 30000),
+		UsernamePrefix:         envOr("USERNAME_PREFIX", "u"),
+		UsernameMaxLen:         envInt("USERNAME_MAX_LEN", 12),
+		PasswordLen:            envInt("PASSWORD_LEN", 12),
+		OperationDelayMs:       envInt("OP_DELAY_MS", 1000),
+		TokenNamePrefix:        envOr("TOKEN_NAME_PREFIX", "autotoken"),
+		StaticAccessToken:      os.Getenv("ACCESS_TOKEN"),
+		ManagementURL:          os.Getenv("MANAGEMENT_OPENAI_COMPAT_URL"),
+		ManagementBearer:       os.Getenv("MANAGEMENT_BEARER"),
+		ManagementExistingKeys: os.Getenv("MANAGEMENT_EXISTING_TOKENS"),
+		TokenTxtPath:           envOr("TOKEN_TXT_PATH", "./tokens.txt"),
+		TokenCSVPath:           envOr("TOKEN_CSV_PATH", "./tokens.csv"),
 	}
 }
 
@@ -350,6 +376,10 @@ func floatValue(value any) float64 {
 		}
 	}
 	return 0
+}
+
+func floatPtr(value float64) *float64 {
+	return &value
 }
 
 func quotaToUSD(quota float64) string {

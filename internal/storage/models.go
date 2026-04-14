@@ -46,10 +46,11 @@ type WorkflowStep struct {
 
 // Workflow represents the various registration workflow steps
 type Workflow struct {
-	Register    WorkflowStep `json:"register"`
-	Login       WorkflowStep `json:"login"`
-	TokenCreate WorkflowStep `json:"tokenCreate"`
-	TokenList   WorkflowStep `json:"tokenList"`
+	Register     WorkflowStep `json:"register"`
+	Login        WorkflowStep `json:"login"`
+	TokenCreate  WorkflowStep `json:"tokenCreate"`
+	TokenList    WorkflowStep `json:"tokenList"`
+	TokenRefresh WorkflowStep `json:"tokenRefresh"`
 }
 
 // Account represents a user account
