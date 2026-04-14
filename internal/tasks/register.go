@@ -31,9 +31,12 @@ type registerResult struct {
 	TokenValue    string
 }
 
-func RunBatchRegister(storePath string, count int) (map[string]any, error) {
+func RunBatchRegister(storePath string, count int, customBaseURL string) (map[string]any, error) {
 	config := LoadConfig()
 	config.StorePath = storePath
+	if customBaseURL != "" {
+		config.BaseURL = customBaseURL
+	}
 	if count < 1 {
 		count = 1
 	}
@@ -44,6 +47,8 @@ func RunBatchRegister(storePath string, count int) (map[string]any, error) {
 	}); err != nil {
 		return nil, err
 	}
+
+	log.Printf("[register] using baseUrl: %s", config.BaseURL)
 
 	registerSuccess := 0
 	registerFailed := 0

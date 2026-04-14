@@ -141,7 +141,7 @@ func (h *Handlers) startBalanceRun() map[string]interface{} {
 	}
 }
 
-func (h *Handlers) startRegisterRun(count int) map[string]interface{} {
+func (h *Handlers) startRegisterRun(count int, baseUrl string) map[string]interface{} {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -169,8 +169,8 @@ func (h *Handlers) startRegisterRun(count int) map[string]interface{} {
 	h.RegisterStatus.Summary = nil
 	h.RegisterStatus.Error = ""
 
-	go func(requestedCount int) {
-		summary, err := tasks.RunBatchRegister(h.StorePath, requestedCount)
+	go func(requestedCount int, customBaseURL string) {
+		summary, err := tasks.RunBatchRegister(h.StorePath, requestedCount, customBaseURL)
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.RegisterStatus.Running = false
@@ -179,7 +179,7 @@ func (h *Handlers) startRegisterRun(count int) map[string]interface{} {
 			h.RegisterStatus.Error = err.Error()
 		}
 		h.RegisterStatus.Summary = summary
-	}(count)
+	}(count, baseUrl)
 
 	return map[string]interface{}{
 		"ok":             true,
@@ -319,13 +319,14 @@ func (h *Handlers) HandlePostRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Count int `json:"count"`
+		Count   int    `json:"count"`
+		BaseURL string `json:"baseUrl"`
 	}
 	if err := readJSONBody(r, &body); err != nil {
 		RespondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
 		return
 	}
-	RespondJSON(w, http.StatusAccepted, h.startRegisterRun(body.Count))
+	RespondJSON(w, http.StatusAccepted, h.startRegisterRun(body.Count, body.BaseURL))
 }
 
 func (h *Handlers) HandlePostCheckin(w http.ResponseWriter, r *http.Request) {
