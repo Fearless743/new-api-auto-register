@@ -83935,7 +83935,9 @@ function AccountWorkflow({ account }) {
 }
 function CredentialsCell({ account }) {
   const hasLocalSession = Boolean(account.session);
+  const hasBaseUrl = Boolean(account.baseUrl);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(descriptions_default, { column: 1, size: "small", colon: false, labelStyle: { color: "#666", fontFamily: "monospace" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[BASEURL]", children: hasBaseUrl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#00ff41", fontFamily: "monospace", fontSize: 12 }, children: account.baseUrl }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#666", fontFamily: "monospace", fontSize: 12 }, children: "--" }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[TOKEN]", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(typography_default.Paragraph, { copyable: true, ellipsis: { rows: 1, expandable: true, symbol: "\u5C55\u5F00" }, style: { marginBottom: 0, color: "#00ff41", fontFamily: "monospace", fontSize: 12 }, children: account.token || "NULL" }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(descriptions_default.Item, { label: "[SESSION]", children: hasLocalSession ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#00ff41", fontFamily: "monospace", fontSize: 12 }, children: "EXISTS" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "#666", fontFamily: "monospace", fontSize: 12 }, children: "MISSING" }) })
   ] }) });

@@ -287,10 +287,14 @@ function AccountWorkflow({ account }) {
 
 function CredentialsCell({ account }) {
   const hasLocalSession = Boolean(account.session);
+  const hasBaseUrl = Boolean(account.baseUrl);
 
   return (
     <Card size="small" bordered={false} style={{ background: "#111", border: "1px solid #333", borderRadius: 0 }} bodyStyle={{ padding: 4 }}>
       <Descriptions column={1} size="small" colon={false} labelStyle={{ color: "#666", fontFamily: "monospace" }}>
+        <Descriptions.Item label="[BASEURL]">
+          {hasBaseUrl ? <span style={{ color: "#00ff41", fontFamily: "monospace", fontSize: 12 }}>{account.baseUrl}</span> : <span style={{ color: "#666", fontFamily: "monospace", fontSize: 12 }}>--</span>}
+        </Descriptions.Item>
         <Descriptions.Item label="[TOKEN]">
           <Typography.Paragraph copyable ellipsis={{ rows: 1, expandable: true, symbol: "展开" }} style={{ marginBottom: 0, color: "#00ff41", fontFamily: "monospace", fontSize: 12 }}>
             {account.token || "NULL"}
