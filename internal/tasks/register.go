@@ -308,6 +308,57 @@ func generateCredential(config Config, index int) (string, string) {
 	return username, password
 }
 
+var emailVerificationCache = struct {
+	value  bool
+	cached bool
+}{value: false, cached: false}
+
+func needsEmailVerification(baseURL string) bool {
+	if emailVerificationCache.cached {
+		return emailVerificationCache.value
+	}
+
+	statusURL := strings.TrimRight(baseURL, "/") + "/api/status"
+	headers := map[string]string{
+		"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0",
+		"Accept":     "application/json, text/plain, */*",
+	}
+
+	req, err := http.NewRequest(http.MethodGet, statusURL, nil)
+	if err != nil {
+		emailVerificationCache.cached = true
+		emailVerificationCache.value = false
+		return false
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		emailVerificationCache.cached = true
+		emailVerificationCache.value = false
+		return false
+	}
+	defer res.Body.Close()
+
+	raw, _ := io.ReadAll(res.Body)
+	var resp map[string]any
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		emailVerificationCache.cached = true
+		emailVerificationCache.value = false
+		return false
+	}
+
+	data := asMap(resp["data"])
+	emailVerification := data["email_verification"]
+	emailVerificationCache.value = boolValue(emailVerification)
+	emailVerificationCache.cached = true
+
+	log.Printf("[register] email_verification=%v", emailVerificationCache.value)
+	return emailVerificationCache.value
+}
+
 func registerWithCredential(config Config, username, password string) registerResult {
 	payload := map[string]string{
 		"username":                 username,
@@ -321,7 +372,8 @@ func registerWithCredential(config Config, username, password string) registerRe
 
 	email := ""
 
-	if config.EnableEmail {
+	// Auto-detect if email verification is required
+	if needsEmailVerification(config.BaseURL) {
 		log.Printf("[emailnator] starting for %s", username)
 		client := newEmailnatorClient()
 		if err := client.generateEmail(); err != nil {
