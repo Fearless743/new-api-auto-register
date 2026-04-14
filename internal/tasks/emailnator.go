@@ -117,17 +117,24 @@ func (c *emailnatorClient) generateEmail() error {
 
 func (c *emailnatorClient) waitForVerificationCode(baseURL string) (string, error) {
 	verifyURL := strings.TrimRight(baseURL, "/") + "/api/verification?email=" + c.email + "&turnstile="
+	log.Printf("[emailnator] sending verification request to: %s", verifyURL)
 
 	req, err := http.NewRequest(http.MethodGet, verifyURL, nil)
 	if err != nil {
+		log.Printf("[emailnator] failed to create verification request: %v", err)
 		return "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36")
 
-	_, err = c.client.Do(req)
+	res, err := c.client.Do(req)
 	if err != nil {
 		log.Printf("[emailnator] failed to send verification email: %v", err)
+		return "", err
 	}
+	defer res.Body.Close()
+
+	raw, _ := io.ReadAll(res.Body)
+	log.Printf("[emailnator] verification response: %s", string(raw))
 
 	for retry := 0; retry < MaxRetries; retry++ {
 		time.Sleep(time.Duration(RetryIntervalMs) * time.Millisecond)
