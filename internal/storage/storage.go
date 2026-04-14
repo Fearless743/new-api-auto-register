@@ -378,14 +378,20 @@ func normalizeLastCheckinResult(value any) *LastCheckinResult {
 }
 
 func normalizeWorkflow(value any) Workflow {
-	raw := asMap(value)
-	return Workflow{
-		Register:     normalizeWorkflowStep(raw["register"]),
-		Login:        normalizeWorkflowStep(raw["login"]),
-		TokenCreate:  normalizeWorkflowStep(raw["tokenCreate"]),
-		TokenList:    normalizeWorkflowStep(raw["tokenList"]),
-		TokenRefresh: normalizeWorkflowStep(raw["tokenRefresh"]),
+	raw, isMap := value.(map[string]any)
+	if !isMap {
+		return Workflow{}
 	}
+	result := Workflow{}
+	for k, v := range raw {
+		if str, ok := v.(string); ok {
+			result[k] = str
+		}
+	}
+	if len(result) == 0 {
+		result = Workflow{}
+	}
+	return result
 }
 
 func mergeAccount(existing *Account, patch Account) Account {
@@ -458,20 +464,12 @@ func mergeAccount(existing *Account, patch Account) Account {
 
 func mergeWorkflow(existing Workflow, patch Workflow) Workflow {
 	merged := existing
-	if shouldReplaceWorkflowStep(patch.Register) {
-		merged.Register = patch.Register
-	}
-	if shouldReplaceWorkflowStep(patch.Login) {
-		merged.Login = patch.Login
-	}
-	if shouldReplaceWorkflowStep(patch.TokenCreate) {
-		merged.TokenCreate = patch.TokenCreate
-	}
-	if shouldReplaceWorkflowStep(patch.TokenList) {
-		merged.TokenList = patch.TokenList
-	}
-	if shouldReplaceWorkflowStep(patch.TokenRefresh) {
-		merged.TokenRefresh = patch.TokenRefresh
+	if len(patch) > 0 {
+		for k, v := range patch {
+			if v != "" {
+				merged[k] = v
+			}
+		}
 	}
 	return merged
 }

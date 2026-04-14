@@ -156,7 +156,6 @@ func filterAccounts(accounts []storage.Account, keyword, statusMode, step string
 
 	var result []storage.Account
 	for _, account := range accounts {
-		// Keyword filter
 		if keyword != "" {
 			haystack := []string{account.Username, account.Token, account.NewAPIUser, account.Session}
 			haystackStr := strings.Join(haystack, " ")
@@ -176,19 +175,7 @@ func filterAccounts(accounts []storage.Account, keyword, statusMode, step string
 
 		var hasFailed, hasIdle, allSuccess bool
 		for _, s := range steps {
-			var st string
-			switch s {
-			case "register":
-				st = workflow.Register.Status
-			case "login":
-				st = workflow.Login.Status
-			case "tokenCreate":
-				st = workflow.TokenCreate.Status
-			case "tokenList":
-				st = workflow.TokenList.Status
-			case "tokenRefresh":
-				st = workflow.TokenRefresh.Status
-			}
+			st := workflow[s]
 			if st == "failed" {
 				hasFailed = true
 			}
@@ -202,22 +189,9 @@ func filterAccounts(accounts []storage.Account, keyword, statusMode, step string
 			}
 		}
 
-		// Re-evaluate allSuccess - it's true only if ALL steps are success
 		allSuccess = true
 		for _, s := range steps {
-			var st string
-			switch s {
-			case "register":
-				st = workflow.Register.Status
-			case "login":
-				st = workflow.Login.Status
-			case "tokenCreate":
-				st = workflow.TokenCreate.Status
-			case "tokenList":
-				st = workflow.TokenList.Status
-			case "tokenRefresh":
-				st = workflow.TokenRefresh.Status
-			}
+			st := workflow[s]
 			if st != "success" {
 				allSuccess = false
 				break
@@ -253,19 +227,7 @@ func buildAccountsSummary(accounts, filteredAccounts []storage.Account) map[stri
 		allSuccess := true
 
 		for _, step := range workflowSteps {
-			var st string
-			switch step {
-			case "register":
-				st = account.Workflow.Register.Status
-			case "login":
-				st = account.Workflow.Login.Status
-			case "tokenCreate":
-				st = account.Workflow.TokenCreate.Status
-			case "tokenList":
-				st = account.Workflow.TokenList.Status
-			case "tokenRefresh":
-				st = account.Workflow.TokenRefresh.Status
-			}
+			st := account.Workflow[step]
 			if st == "failed" {
 				hasFailed = true
 			}
@@ -282,31 +244,12 @@ func buildAccountsSummary(accounts, filteredAccounts []storage.Account) map[stri
 		}
 	}
 
-	// Find latest updated timestamp
 	var latest *string
 	for _, account := range accounts {
-		var ts []string
-		if account.Workflow.Register.LastRunAt != nil {
-			ts = append(ts, string(*account.Workflow.Register.LastRunAt))
-		}
-		if account.Workflow.Login.LastRunAt != nil {
-			ts = append(ts, string(*account.Workflow.Login.LastRunAt))
-		}
-		if account.Workflow.TokenCreate.LastRunAt != nil {
-			ts = append(ts, string(*account.Workflow.TokenCreate.LastRunAt))
-		}
-		if account.Workflow.TokenList.LastRunAt != nil {
-			ts = append(ts, string(*account.Workflow.TokenList.LastRunAt))
-		}
-		if account.Workflow.TokenRefresh.LastRunAt != nil {
-			ts = append(ts, string(*account.Workflow.TokenRefresh.LastRunAt))
-		}
 		if account.UpdatedAt != nil {
-			ts = append(ts, string(*account.UpdatedAt))
-		}
-		for _, t := range ts {
-			if latest == nil || t > *latest {
-				latest = &t
+			ts := string(*account.UpdatedAt)
+			if latest == nil || ts > *latest {
+				latest = &ts
 			}
 		}
 	}

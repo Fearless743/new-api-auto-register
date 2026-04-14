@@ -227,7 +227,12 @@ func RetryAccountWorkflow(storePath, username, step string) (map[string]any, err
 }
 
 func saveWorkflowStep(storePath, username, password, step string, result registerResult, extraPatch storage.Account) error {
-	workflowStep := workflowStateFromResult(result, "")
+	status := "idle"
+	if result.OK {
+		status = "success"
+	} else {
+		status = "failed"
+	}
 	return storage.UpdateStore(storePath, func(store *storage.Store) error {
 		existing := storage.FindAccount(store, username)
 		patch := extraPatch
@@ -239,18 +244,7 @@ func saveWorkflowStep(storePath, username, password, step string, result registe
 		if existing != nil {
 			workflow = existing.Workflow
 		}
-		switch step {
-		case "register":
-			workflow.Register = workflowStep
-		case "login":
-			workflow.Login = workflowStep
-		case "tokenCreate":
-			workflow.TokenCreate = workflowStep
-		case "tokenList":
-			workflow.TokenList = workflowStep
-		case "tokenRefresh":
-			workflow.TokenRefresh = workflowStep
-		}
+		workflow[step] = status
 		patch.Workflow = workflow
 		storage.UpsertAccountInStore(store, patch)
 		return nil
