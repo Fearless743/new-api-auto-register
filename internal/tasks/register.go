@@ -372,46 +372,20 @@ func registerWithCredential(config Config, username, password string) registerRe
 
 	email := ""
 
-	// Check if upstream requires email verification
+	// If upstream requires email verification, use Emailnator directly
 	if needsEmailVerification(config.BaseURL) {
-		// First try registration WITHOUT email (some APIs allow this)
-		requestURL := strings.TrimRight(config.BaseURL, "/") + "/api/user/register?turnstile="
-		testHeaders := commonHeaders(config.BaseURL)
-		testHeaders["Content-Type"] = "application/json"
-		testHeaders["Referer"] = strings.TrimRight(config.BaseURL, "/") + "/register"
-		if config.DefaultNewAPIUser != "" {
-			testHeaders["New-API-User"] = config.DefaultNewAPIUser
-		}
-		if config.ExtraCookies != "" {
-			testHeaders["Cookie"] = config.ExtraCookies
-		}
-		testBody, _ := json.Marshal(payload)
-
-		log.Printf("[register] first attempt without email for %s", username)
-		firstResult := doJSONRequest(http.MethodPost, requestURL, testHeaders, testBody)
-		firstResult.Username = username
-		firstResult.Password = password
-
-		// If succeeded without email, return
-		if firstResult.OK {
-			return firstResult
-		}
-
-		// If failed with "verification" message, try with Emailnator
-		if msg := stringValue(firstResult.Response["message"]); strings.Contains(msg, "验证") || strings.Contains(msg, "verification") {
-			log.Printf("[emailnator] first attempt failed, trying with email for %s", username)
-			client := newEmailnatorClient()
-			if err := client.generateEmail(); err != nil {
-				log.Printf("[emailnator] generate email failed: %v", err)
+		log.Printf("[emailnator] starting for %s", username)
+		client := newEmailnatorClient()
+		if err := client.generateEmail(); err != nil {
+			log.Printf("[emailnator] generate email failed: %v", err)
+		} else {
+			email = client.email
+			payload["email"] = email
+			code, err := client.waitForVerificationCode(config.BaseURL)
+			if err != nil {
+				log.Printf("[emailnator] verification code failed: %v", err)
 			} else {
-				email = client.email
-				payload["email"] = email
-				code, err := client.waitForVerificationCode(config.BaseURL)
-				if err != nil {
-					log.Printf("[emailnator] verification code failed: %v", err)
-				} else {
-					payload["verification_code"] = code
-				}
+				payload["verification_code"] = code
 			}
 		}
 	}
