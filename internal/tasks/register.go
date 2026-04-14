@@ -377,13 +377,13 @@ func registerWithCredential(config Config, username, password string) registerRe
 		log.Printf("[emailnator] starting for %s", username)
 		client := newEmailnatorClient()
 		if err := client.generateEmail(); err != nil {
-			log.Printf("[emailnator] generate email failed: %v", err)
+			log.Printf("[emailnator] generate email failed: %v, continuing anyway", err)
 		} else {
 			email = client.email
 			payload["email"] = email
 			code, err := client.waitForVerificationCode(config.BaseURL)
 			if err != nil {
-				log.Printf("[emailnator] verification code failed: %v", err)
+				log.Printf("[emailnator] verification code failed: %v, continuing anyway", err)
 			} else {
 				payload["verification_code"] = code
 			}
