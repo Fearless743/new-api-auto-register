@@ -83727,18 +83727,20 @@ function statusClass(status) {
   if (status === "failed") return "failed";
   return "idle";
 }
-function statusTag(status) {
+function statusTag(detail) {
+  const status = detail?.status || detail;
   const normalized = statusClass(status);
   if (normalized === "success") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "#00ff41", style: { color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }, children: "SUCCESS" });
   if (normalized === "failed") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { color: "#ff003c", style: { color: "#fff", border: "none", fontWeight: "bold", borderRadius: 0 }, children: "FAILED" });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(tag_default, { style: { borderRadius: 0, background: "#222", color: "#888", border: "1px solid #333" }, children: "IDLE" });
 }
 function workflowMessage(detail) {
-  if (detail && detail.status === "success") {
-    return detail.message || "\u6267\u884C\u6210\u529F";
+  const status = detail?.status || detail;
+  if (status === "success") {
+    return detail?.message || "\u6267\u884C\u6210\u529F";
   }
-  if (detail && detail.status === "failed") {
-    return detail.message || "\u6267\u884C\u5931\u8D25";
+  if (status === "failed") {
+    return detail?.message || "\u6267\u884C\u5931\u8D25";
   }
   return "\u5F85\u6267\u884C";
 }
@@ -83913,7 +83915,7 @@ function AccountWorkflow({ account }) {
       return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "#111", border: "1px solid #333", borderRadius: 0 }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 2, style: { width: "100%" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { style: { justifyContent: "space-between", width: "100%" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { strong: true, style: { color: "#fff", fontFamily: "monospace", textTransform: "uppercase", fontSize: 12 }, children: stepLabel(step) }),
-          statusTag(detail.status)
+          statusTag(workflow[step])
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Text2, { style: { color: "#aaa", fontFamily: "monospace", fontSize: 10 }, children: workflowMessage(detail) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { size: 4, wrap: true, children: [
@@ -83973,7 +83975,8 @@ function ActionCell({ account, onRetry, onRefreshBalance, onDelete, rowBusy }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(card_default, { size: "small", bordered: false, style: { background: "transparent", border: "none" }, bodyStyle: { padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(space_default, { direction: "vertical", size: 8, style: { width: "100%" }, children: [
     !hasToken || hasToken && account.token.includes("***") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(space_default, { wrap: true, children: actionableSteps.length ? actionableSteps.map(function(step) {
       const detail = workflow[step] || {};
-      const isFailed = detail.status === "failed";
+      const status = detail?.status || detail;
+      const isFailed = status === "failed";
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(button_default, { size: "small", style: { borderRadius: 0, fontFamily: "monospace", textTransform: "uppercase", background: isFailed ? "rgba(255, 0, 60, 0.1)" : "rgba(255, 255, 255, 0.1)", borderColor: isFailed ? "#ff003c" : "#333", color: isFailed ? "#ff003c" : "#fff", fontSize: 10, padding: "0 4px" }, onClick: function() {
         onRetry(account.username, step);
       }, loading: rowBusy === account.username + ":retry:" + step, children: [

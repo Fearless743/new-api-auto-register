@@ -46,7 +46,8 @@ function statusClass(status) {
   return "idle";
 }
 
-function statusTag(status) {
+function statusTag(detail) {
+  const status = detail?.status || detail;
   const normalized = statusClass(status);
   if (normalized === "success") return <Tag color="#00ff41" style={{ color: "#000", border: "none", fontWeight: "bold", borderRadius: 0 }}>SUCCESS</Tag>;
   if (normalized === "failed") return <Tag color="#ff003c" style={{ color: "#fff", border: "none", fontWeight: "bold", borderRadius: 0 }}>FAILED</Tag>;
@@ -54,11 +55,12 @@ function statusTag(status) {
 }
 
 function workflowMessage(detail) {
-  if (detail && detail.status === "success") {
-    return detail.message || "执行成功";
+  const status = detail?.status || detail;
+  if (status === "success") {
+    return detail?.message || "执行成功";
   }
-  if (detail && detail.status === "failed") {
-    return detail.message || "执行失败";
+  if (status === "failed") {
+    return detail?.message || "执行失败";
   }
   return "待执行";
 }
@@ -266,7 +268,7 @@ function AccountWorkflow({ account }) {
             <Space direction="vertical" size={2} style={{ width: "100%" }}>
               <Space style={{ justifyContent: "space-between", width: "100%" }}>
                 <Text strong style={{ color: "#fff", fontFamily: "monospace", textTransform: "uppercase", fontSize: 12 }}>{stepLabel(step)}</Text>
-                {statusTag(detail.status)}
+                {statusTag(workflow[step])}
               </Space>
               <Text style={{ color: "#aaa", fontFamily: "monospace", fontSize: 10 }}>{workflowMessage(detail)}</Text>
               <Space size={4} wrap>
@@ -354,7 +356,8 @@ function ActionCell({ account, onRetry, onRefreshBalance, onDelete, rowBusy }) {
           <Space wrap>
             {actionableSteps.length ? actionableSteps.map(function (step) {
               const detail = workflow[step] || {};
-              const isFailed = detail.status === "failed";
+              const status = detail?.status || detail;
+              const isFailed = status === "failed";
               return (
                 <Button key={step} size="small" style={{ borderRadius: 0, fontFamily: "monospace", textTransform: "uppercase", background: isFailed ? "rgba(255, 0, 60, 0.1)" : "rgba(255, 255, 255, 0.1)", borderColor: isFailed ? "#ff003c" : "#333", color: isFailed ? "#ff003c" : "#fff", fontSize: 10, padding: "0 4px" }} onClick={function () { onRetry(account.username, step); }} loading={rowBusy === account.username + ":retry:" + step}>
                   {isFailed ? "RETRY " : "EXEC "}{stepLabel(step)}
