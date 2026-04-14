@@ -390,7 +390,8 @@ func normalizeWorkflow(value any) Workflow {
 
 func mergeAccount(existing *Account, patch Account) Account {
 	if existing == nil {
-		return normalizeAccount(patch)
+		patch.Username = strings.TrimSpace(patch.Username)
+		return patch
 	}
 
 	merged := *existing
