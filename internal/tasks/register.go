@@ -58,7 +58,8 @@ func RunBatchRegister(storePath string, count int) (map[string]any, error) {
 		username, password := generateCredential(config, i+1)
 		log.Printf("[register] [%d/%d] registering %s password=%s", i+1, count, username, password)
 		regResult := registerWithCredential(config, username, password)
-		_ = saveWorkflowStep(storePath, username, password, "register", regResult, storage.Account{})
+		log.Printf("[register] [%d/%d] register result: ok=%v status=%d response=%v", i+1, count, regResult.OK, regResult.HTTPStatus, regResult.Response)
+		_ = saveWorkflowStep(storePath, username, password, "register", regResult, storage.Account{BaseURL: config.BaseURL})
 		if !regResult.OK {
 			registerFailed++
 			log.Printf("[register] [%d/%d] FAILED %s (status=%d)", i+1, count, username, regResult.HTTPStatus)
