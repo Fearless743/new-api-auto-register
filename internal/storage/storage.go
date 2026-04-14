@@ -459,7 +459,7 @@ func mergeAccount(existing *Account, patch Account) Account {
 	if patch.Notes != nil {
 		merged.Notes = patch.Notes
 	}
-	return normalizeAccount(merged)
+	return merged
 }
 
 func mergeWorkflow(existing Workflow, patch Workflow) Workflow {
