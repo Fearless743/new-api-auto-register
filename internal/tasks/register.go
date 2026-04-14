@@ -240,6 +240,7 @@ func saveWorkflowStep(storePath, username, password, step string, result registe
 		if password != "" {
 			patch.Password = password
 		}
+		log.Printf("[saveWorkflowStep] username=%s password=%q existing=%v", username, password, existing != nil)
 		workflow := storage.Workflow{}
 		if existing != nil {
 			workflow = existing.Workflow
