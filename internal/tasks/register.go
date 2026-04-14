@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -55,21 +56,25 @@ func RunBatchRegister(storePath string, count int) (map[string]any, error) {
 
 	for i := 0; i < count; i++ {
 		username, password := generateCredential(config, i+1)
+		log.Printf("[register] [%d/%d] registering %s", i+1, count, username)
 		regResult := registerWithCredential(config, username, password)
 		_ = saveWorkflowStep(storePath, username, password, "register", regResult, storage.Account{})
 		if !regResult.OK {
 			registerFailed++
+			log.Printf("[register] [%d/%d] FAILED %s (status=%d)", i+1, count, username, regResult.HTTPStatus)
 			if i < count-1 {
 				sleep(config.RequestDelayMs)
 			}
 			continue
 		}
 		registerSuccess++
+		log.Printf("[register] [%d/%d] SUCCESS %s", i+1, count, username)
 
 		if config.OperationDelayMs > 0 {
 			sleep(config.OperationDelayMs)
 		}
 
+		log.Printf("[register] [%d/%d] logging in %s", i+1, count, username)
 		loginResult := loginOne(config, username, password)
 		_ = saveWorkflowStep(storePath, username, password, "login", loginResult, storage.Account{
 			Session:     loginResult.SessionCookie,
@@ -78,32 +83,38 @@ func RunBatchRegister(storePath string, count int) (map[string]any, error) {
 		})
 		if !loginResult.OK {
 			loginFailed++
+			log.Printf("[register] [%d/%d] login FAILED %s (status=%d)", i+1, count, username, loginResult.HTTPStatus)
 			if i < count-1 {
 				sleep(config.RequestDelayMs)
 			}
 			continue
 		}
 		loginSuccess++
+		log.Printf("[register] [%d/%d] login SUCCESS %s", i+1, count, username)
 
 		if config.OperationDelayMs > 0 {
 			sleep(config.OperationDelayMs)
 		}
 
+		log.Printf("[register] [%d/%d] creating token for %s", i+1, count, username)
 		tokenCreateResult := createTokenOne(config, loginResult)
 		_ = saveWorkflowStep(storePath, username, password, "tokenCreate", tokenCreateResult, storage.Account{})
 		if !tokenCreateResult.OK {
 			tokenCreateFailed++
+			log.Printf("[register] [%d/%d] token create FAILED %s (status=%d)", i+1, count, username, tokenCreateResult.HTTPStatus)
 			if i < count-1 {
 				sleep(config.RequestDelayMs)
 			}
 			continue
 		}
 		tokenCreateSuccess++
+		log.Printf("[register] [%d/%d] token create SUCCESS %s", i+1, count, username)
 
 		if config.OperationDelayMs > 0 {
 			sleep(config.OperationDelayMs)
 		}
 
+		log.Printf("[register] [%d/%d] fetching token for %s", i+1, count, username)
 		tokenListResult, finalToken := finalizeTokenValue(config, loginResult, tokenCreateResult, "")
 		_ = saveWorkflowStep(storePath, username, password, "tokenList", tokenListResult, storage.Account{
 			Token:      finalToken,
@@ -112,17 +123,22 @@ func RunBatchRegister(storePath string, count int) (map[string]any, error) {
 		})
 		if !tokenListResult.OK {
 			tokenListFailed++
+			log.Printf("[register] [%d/%d] token list FAILED %s (status=%d)", i+1, count, username, tokenListResult.HTTPStatus)
 			if i < count-1 {
 				sleep(config.RequestDelayMs)
 			}
 			continue
 		}
 		tokenListSuccess++
+		log.Printf("[register] [%d/%d] token list SUCCESS %s", i+1, count, username)
 
 		if i < count-1 {
 			sleep(config.RequestDelayMs)
 		}
 	}
+
+	log.Printf("完成：注册 成功%d/失败%d，登录 成功%d/失败%d，创建令牌 成功%d/失败%d，查询令牌 成功%d/失败%d",
+		registerSuccess, registerFailed, loginSuccess, loginFailed, tokenCreateSuccess, tokenCreateFailed, tokenListSuccess, tokenListFailed)
 
 	return map[string]any{
 		"requestedCount": count,
