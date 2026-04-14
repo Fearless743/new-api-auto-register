@@ -99,14 +99,21 @@ func (c *emailnatorClient) generateEmail() error {
 	}
 
 	raw, _ := io.ReadAll(res.Body)
+	log.Printf("[emailnator] generate response: %s", string(raw))
 	var resp map[string]any
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return fmt.Errorf("generate email response parse failed: %v", err)
+		return fmt.Errorf("generate email response parse failed: %v, raw: %s", err, string(raw))
 	}
 
 	emails, ok := resp["email"].([]any)
 	if !ok || len(emails) == 0 {
-		return fmt.Errorf("no email in response")
+		// Try alternate response format
+		if emailStr, ok := resp["email"].(string); ok && emailStr != "" {
+			c.email = emailStr
+			log.Printf("[emailnator] generated: %s", c.email)
+			return nil
+		}
+		return fmt.Errorf("no email in response: %v", resp)
 	}
 
 	c.email = fmt.Sprintf("%v", emails[0])
